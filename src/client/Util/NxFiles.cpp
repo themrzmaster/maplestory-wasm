@@ -24,14 +24,40 @@
 
 #include <fstream>
 
+#ifdef MS_PLATFORM_WASM
+#include "../LazyFS/LazyFS.h"
+#endif
+
 #include <unistd.h>
 #include <cstdio>
-
 
 namespace jrc
 {
     Error NxFiles::init()
     {
+        constexpr const char* REQUIRED_ROOT_NX = "Base.nx";
+#ifdef MS_PLATFORM_WASM
+        LazyFS::Initialize();
+        {
+            std::string base_url = std::string("/assets/") + REQUIRED_ROOT_NX;
+            if (!LazyFS::RegisterFile(REQUIRED_ROOT_NX, base_url))
+            {
+                return { Error::MISSING_FILE, REQUIRED_ROOT_NX };
+            }
+        }
+        for (auto filename : NxFiles::filenames)
+        {
+            std::string url = std::string("/assets/") + filename;
+            if (!LazyFS::RegisterFile(filename, url))
+            {
+                return { Error::MISSING_FILE, filename };
+            }
+        }
+#else
+        if (!std::ifstream{ REQUIRED_ROOT_NX }.good())
+        {
+            return { Error::MISSING_FILE, REQUIRED_ROOT_NX };
+        }
         for (auto filename : NxFiles::filenames)
         {
             if (!std::ifstream{ filename }.good())
@@ -39,6 +65,7 @@ namespace jrc
                 return { Error::MISSING_FILE, filename };
             }
         }
+#endif
 
         try
         {
@@ -53,14 +80,14 @@ namespace jrc
 
         constexpr const char* POSTCHAOS_BITMAP =
             "Login.img/WorldSelect/BtChannel/layer:bg";
-        auto postChaosBitmapType =
-            nl::nx::ui.resolve(POSTCHAOS_BITMAP).data_type();
-
-        if (postChaosBitmapType != nl::node::type::bitmap)
+        // Attempt to resolve it to log if this "version" identifier exists
+        auto ui_node = nl::nx::ui.resolve(POSTCHAOS_BITMAP);
+        
+        if (!ui_node || ui_node.data_type() != nl::node::type::bitmap)
         {
-            return Error::WRONG_UI_FILE;
+            Console::get().print("[init] UI.nx is missing the post-Chaos 'Login.img/WorldSelect/BtChannel/layer:bg' node.");
+            Console::get().print("[init] Client expected post-Chaos UI.nx version, but continuing anyway.");
         }
-
         return Error::NONE;
     }
 }
