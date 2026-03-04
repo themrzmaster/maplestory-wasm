@@ -119,6 +119,8 @@ namespace jrc
         State state;
         int32_t mapid;
 
+        uint64_t last_pickup_time;
+
         MapInfo mapinfo;
         MapTilesObjs tilesobjs;
         MapBackgrounds backgrounds;
