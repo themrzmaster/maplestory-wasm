@@ -790,6 +790,8 @@ namespace jrc
 
         switch (background)
         {
+        case Text::NONE:
+            break;
         case Text::NAMETAG:
             for (const Text::Layout::Line& line : layout)
             {
@@ -803,6 +805,8 @@ namespace jrc
                 quads.emplace_back(left - 1, left, top + 1, bottom - 1, nulloffset, ntcolor, 0.0f);
                 quads.emplace_back(right, right + 1, top + 1, bottom - 1, nulloffset, ntcolor, 0.0f);
             }
+            break;
+        default:
             break;
         }
 
@@ -910,7 +914,6 @@ namespace jrc
         glClear(GL_COLOR_BUFFER_BIT);
 
         GLsizei csize = static_cast<GLsizei>(quads.size() * sizeof(Quad));
-        GLsizei fsize = static_cast<GLsizei>(quads.size() * Quad::LENGTH);
         glEnableVertexAttribArray(attribute_coord);
         glEnableVertexAttribArray(attribute_color);
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
@@ -937,6 +940,7 @@ namespace jrc
         glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indices.size()), GL_UNSIGNED_SHORT, 0);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 #else
+        GLsizei fsize = static_cast<GLsizei>(quads.size() * Quad::LENGTH);
         glDrawArrays(GL_QUADS, 0, fsize);
 #endif
 
