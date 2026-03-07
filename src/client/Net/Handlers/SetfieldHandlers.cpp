@@ -21,7 +21,6 @@
 #include "Helpers/ItemParser.h"
 #include "Helpers/LoginParser.h"
 
-#include "../../Configuration.h"
 #include "../../Console.h"
 #include "../../Constants.h"
 #include "../../Timer.h"
@@ -53,12 +52,13 @@ namespace jrc
 
     void SetfieldHandler::handle(InPacket& recv) const
     {
-        int32_t channel = recv.read_int();
+        recv.read_int(); // channel
         int8_t  mode1   = recv.read_byte();
         int8_t  mode2   = recv.read_byte();
+
         if (mode1 == 0 && mode2 == 0)
         {
-            change_map(recv, channel);
+            change_map(recv);
         }
         else
         {
@@ -66,7 +66,7 @@ namespace jrc
         }
     }
 
-    void SetfieldHandler::change_map(InPacket& recv, int32_t) const
+    void SetfieldHandler::change_map(InPacket& recv) const
     {
         recv.skip(3);
 

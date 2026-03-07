@@ -19,6 +19,7 @@
 
 #include "../Audio/Audio.h"
 #include "../Character/SkillId.h"
+#include "../IO/KeyAction.h"
 #include "../IO/Messages.h"
 #include "../Net/Packets/GameplayPackets.h"
 #include "../Net/Packets/AttackAndSkillPackets.h"
@@ -26,6 +27,7 @@
 
 #include "nlnx/nx.hpp"
 
+#include <algorithm>
 #include <chrono>
 
 namespace jrc
@@ -38,6 +40,8 @@ namespace jrc
     Stage::Stage()
         : combat(player, chars, mobs)
         , last_pickup_time(0)
+        , pending_intro_warp_mapid(-1)
+        , pending_intro_warp_delay_ms(0)
     {
         state = INACTIVE;
         mapid = 0;
@@ -77,6 +81,8 @@ namespace jrc
         state = INACTIVE;
         mapid = 0;
         effect = MapEffect();
+        pending_intro_warp_mapid = -1;
+        pending_intro_warp_delay_ms = 0;
 
         chars.clear();
         npcs.clear();
@@ -98,7 +104,8 @@ namespace jrc
         physics     = Physics(src["foothold"]);
         mapinfo     = MapInfo(src, physics.get_fht().get_walls(), physics.get_fht().get_borders());
         portals     = MapPortals(src["portal"], mapid);
-        effect      = MapEffect();
+        // Keep any effect injected during the fade transition (e.g. intro Scene packets).
+        // `clear()` already resets stale effects before starting a map change.
     }
 
     void Stage::respawn(int8_t portalid)
@@ -160,6 +167,13 @@ namespace jrc
         chars.update(physics);
         drops.update(physics);
         player.update(physics);
+        if (is_intro_input_locked())
+        {
+            // Direction3-style intro scenes present the actor facing left and
+            // should not react to local movement intent while the scene runs.
+            player.set_direction(false);
+        }
+        update_intro_warp();
         handle_held_actions();
         update_directional_context();
 
@@ -324,11 +338,58 @@ namespace jrc
         }
     }
 
+    bool Stage::is_intro_input_locked() const
+    {
+        return effect.blocks_player_input();
+    }
+
+    void Stage::release_intro_locked_actions()
+    {
+        if (!playable)
+        {
+            return;
+        }
+
+        static constexpr std::array<KeyAction::Id, 8> INTRO_LOCKED_ACTIONS =
+        {
+            KeyAction::LEFT,
+            KeyAction::RIGHT,
+            KeyAction::UP,
+            KeyAction::DOWN,
+            KeyAction::JUMP,
+            KeyAction::ATTACK,
+            KeyAction::PICKUP,
+            KeyAction::SIT
+        };
+
+        for (KeyAction::Id action : INTRO_LOCKED_ACTIONS)
+        {
+            if (player.is_key_down(action))
+            {
+                playable->send_action(action, false);
+            }
+        }
+    }
+
     void Stage::send_key(KeyType::Id type, int32_t action, bool down)
     {
         if (state != ACTIVE || !playable)
         {
             return;
+        }
+
+        if (is_intro_input_locked())
+        {
+            switch (type)
+            {
+            case KeyType::ACTION:
+            case KeyType::SKILL:
+            case KeyType::ITEM:
+            case KeyType::FACE:
+                return;
+            default:
+                break;
+            }
         }
 
         switch (type)
@@ -443,5 +504,34 @@ namespace jrc
     void Stage::add_effect(const std::string& path)
     {
         effect = MapEffect(path);
+        if (is_intro_input_locked())
+        {
+            player.set_direction(false);
+            release_intro_locked_actions();
+        }
+    }
+
+    void Stage::schedule_intro_warp(int32_t target_mapid, int32_t delay_ms)
+    {
+        pending_intro_warp_mapid = target_mapid;
+        pending_intro_warp_delay_ms = std::max<int32_t>(0, delay_ms);
+    }
+
+    void Stage::update_intro_warp()
+    {
+        if (pending_intro_warp_mapid < 0)
+        {
+            return;
+        }
+
+        pending_intro_warp_delay_ms -= Constants::TIMESTEP;
+        if (pending_intro_warp_delay_ms > 0)
+        {
+            return;
+        }
+
+        ChangeMapPacket(false, pending_intro_warp_mapid, "", false).dispatch();
+        pending_intro_warp_mapid = -1;
+        pending_intro_warp_delay_ms = 0;
     }
 }

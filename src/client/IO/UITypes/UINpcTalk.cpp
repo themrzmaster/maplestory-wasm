@@ -368,6 +368,7 @@ namespace jrc
             static_cast<int16_t>(Constants::viewwidth() / 2 - dimension.x() / 2),
             static_cast<int16_t>(Constants::viewheight() / 2 - dimension.y() / 2)
         };
+
     }
 
     void UINpcTalk::send_key(int32_t, bool pressed, bool escape)
