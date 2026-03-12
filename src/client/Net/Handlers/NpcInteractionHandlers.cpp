@@ -166,7 +166,7 @@ namespace jrc
         recv.skip(1);
 
         int32_t npcid = recv.read_int();
-        int8_t msgtype = recv.read_byte(); //0 - textonly, 1 - yes/no, 4 - selection, 12 - accept/decline
+        int8_t msgtype = recv.read_byte(); // 0 - textonly, 1 - yes/no, 4/5 - selection, 12 - accept/decline
         int8_t speaker = recv.read_byte();
         std::string text = recv.read_string();
 
