@@ -48,6 +48,53 @@ namespace jrc
         constexpr int16_t OPTION_VERTICAL_GAP = 2;
         constexpr int16_t HOVER_UNDERLINE_THICKNESS = 1;
         constexpr int8_t SELECTION_DIALOGUE_TYPE = 4;
+        constexpr int8_t LEGACY_SELECTION_DIALOGUE_TYPE = 5;
+
+        bool is_selection_dialogue_type(int8_t msgtype)
+        {
+            // Cosmic-compatible servers have been observed using both values
+            // for menu prompts with #L...#l options.
+            return msgtype == SELECTION_DIALOGUE_TYPE || msgtype == LEGACY_SELECTION_DIALOGUE_TYPE;
+        }
+
+        size_t find_next_selection_tag(const std::string& source, size_t start)
+        {
+            size_t cursor = source.find("#L", start);
+            while (cursor != std::string::npos)
+            {
+                size_t id_start = cursor + 2;
+                size_t id_end = id_start;
+                while (id_end < source.size() && std::isdigit(static_cast<unsigned char>(source[id_end])))
+                {
+                    id_end++;
+                }
+
+                if (id_end > id_start && id_end < source.size() && source[id_end] == '#')
+                {
+                    return cursor;
+                }
+
+                cursor = source.find("#L", cursor + 2);
+            }
+
+            return std::string::npos;
+        }
+
+        std::string trim_selection_text(std::string text)
+        {
+            while (!text.empty())
+            {
+                char ch = text.back();
+                if (ch != '\r' && ch != '\n' && ch != ' ' && ch != '\t')
+                {
+                    break;
+                }
+
+                text.pop_back();
+            }
+
+            return text;
+        }
 
         bool try_parse_int32(const std::string& token, int32_t& value)
         {
@@ -292,7 +339,7 @@ namespace jrc
         if (UIElement::is_in_range(cursorpos))
             return true;
 
-        if (active && type == SELECTION_DIALOGUE_TYPE && !selection_labels.empty())
+        if (active && is_selection_dialogue_type(type) && !selection_labels.empty())
         {
             Point<int16_t> relative = cursorpos - position;
             int16_t text_y = get_dialogue_text_y();
@@ -315,10 +362,10 @@ namespace jrc
         switch (buttonid)
         {
         case OK:
-            if (type == SELECTION_DIALOGUE_TYPE)
+            if (is_selection_dialogue_type(type))
             {
                 int32_t selection = selections.empty() ? 0 : selections[selected];
-                NpcTalkMorePacket(selection).dispatch();
+                NpcTalkMorePacket(type, selection).dispatch();
                 active = false;
             }
             else
@@ -328,7 +375,7 @@ namespace jrc
             }
             break;
         case NEXT:
-            if (type == SELECTION_DIALOGUE_TYPE)
+            if (is_selection_dialogue_type(type))
             {
                 if (!selections.empty())
                 {
@@ -343,7 +390,7 @@ namespace jrc
             }
             break;
         case PREV:
-            if (type == SELECTION_DIALOGUE_TYPE)
+            if (is_selection_dialogue_type(type))
             {
                 if (!selections.empty())
                 {
@@ -391,7 +438,7 @@ namespace jrc
         hovered_selection = -1;
         end_confirms_dialogue = false;
 
-        if (msgtype == SELECTION_DIALOGUE_TYPE)
+        if (is_selection_dialogue_type(msgtype))
         {
             parse_selections(processed_tx, prompttext);
             text = { Text::A12M, Text::LEFT, Text::DARKGREY, prompttext, TEXT_WIDTH, false };
@@ -482,6 +529,7 @@ namespace jrc
             place_button_from_right(YES);
             break;
         case SELECTION_DIALOGUE_TYPE:
+        case LEGACY_SELECTION_DIALOGUE_TYPE:
             place_button_from_right(OK);
             place_button_from_right(NEXT);
             place_button_from_right(PREV);
@@ -539,7 +587,7 @@ namespace jrc
 
     UIElement::CursorResult UINpcTalk::send_cursor(bool clicked, Point<int16_t> cursorpos)
     {
-        if (active && type == SELECTION_DIALOGUE_TYPE && !selection_labels.empty())
+        if (active && is_selection_dialogue_type(type) && !selection_labels.empty())
         {
             Point<int16_t> relative = cursorpos - position;
             int32_t hovered_option = get_option_at(relative);
@@ -606,30 +654,38 @@ namespace jrc
 
             size_t option_start = id_end + 1;
             size_t option_end = source.find("#l", option_start);
-            if (option_end == std::string::npos)
+            bool has_explicit_end = option_end != std::string::npos;
+            if (!has_explicit_end)
             {
-                rendered_text += source.substr(begin);
-                break;
+                option_end = find_next_selection_tag(source, option_start);
+                if (option_end == std::string::npos)
+                {
+                    option_end = source.size();
+                }
             }
 
             if (id_end == id_start)
             {
-                rendered_text += source.substr(begin, option_end + 2 - begin);
-                cursor = option_end + 2;
+                rendered_text += source.substr(begin, option_end - begin);
+                cursor = has_explicit_end ? option_end + 2 : option_end;
                 continue;
             }
 
             int32_t selection_id = 0;
             if (!try_parse_int32(source.substr(id_start, id_end - id_start), selection_id))
             {
-                rendered_text += source.substr(begin, option_end + 2 - begin);
-                cursor = option_end + 2;
+                rendered_text += source.substr(begin, option_end - begin);
+                cursor = has_explicit_end ? option_end + 2 : option_end;
                 continue;
             }
 
             selections.push_back(selection_id);
-            selection_texts.push_back(strip_npc_tokens(source.substr(option_start, option_end - option_start)));
-            cursor = option_end + 2;
+            selection_texts.push_back(
+                trim_selection_text(
+                    strip_npc_tokens(source.substr(option_start, option_end - option_start))
+                )
+            );
+            cursor = has_explicit_end ? option_end + 2 : option_end;
         }
 
         rendered_text = strip_npc_tokens(rendered_text);
