@@ -78,10 +78,10 @@ namespace jrc
         });
     }
 
-    void Combat::use_move(int32_t move_id)
+    bool Combat::use_move(int32_t move_id)
     {
         if (!player.can_attack())
-            return;
+            return false;
 
         const SpecialMove& move = get_move(move_id);
 
@@ -91,10 +91,10 @@ namespace jrc
         {
         case SpecialMove::FBR_NONE:
             apply_move(move);
-            break;
+            return true;
         default:
             ForbidSkillMessage(reason, weapontype).drop();
-            break;
+            return false;
         }
     }
 

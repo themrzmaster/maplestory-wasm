@@ -38,8 +38,8 @@ namespace jrc
         // Poll attacks, damage effects, etc.
         void update();
 
-        // Make the player use a special move.
-        void use_move(int32_t move_id);
+        // Make the player use a special move. Returns true if the move was used.
+        bool use_move(int32_t move_id);
 
         // Add an attack to the attack queue.
         void push_attack(const AttackResult& attack);

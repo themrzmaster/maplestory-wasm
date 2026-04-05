@@ -19,6 +19,7 @@
 
 #include "../Audio/Audio.h"
 #include "../Character/SkillId.h"
+#include "../Data/SkillData.h"
 #include "../IO/KeyAction.h"
 #include "../IO/Messages.h"
 #include "../Net/Packets/GameplayPackets.h"
@@ -161,6 +162,9 @@ namespace jrc
         effect.update();
         tilesobjs.update();
 
+        if (teleport_cooldown > 0)
+            teleport_cooldown--;
+
         reactors.update(physics);
         npcs.update(physics);
         mobs.update(physics);
@@ -283,6 +287,112 @@ namespace jrc
 
         Optional<const Ladder> ladder = mapinfo.findladder(player.get_position(), up);
         player.set_ladder(ladder);
+    }
+
+    bool Stage::is_teleport_skill(int32_t skillid)
+    {
+        return skillid == SkillId::TELEPORT_FP
+            || skillid == SkillId::IL_TELEPORT
+            || skillid == SkillId::PRIEST_TELEPORT;
+    }
+
+    void Stage::apply_teleport(int32_t skillid)
+    {
+        static constexpr int16_t TELEPORT_CD = 44;
+        static constexpr int16_t STEP = 8;
+        static constexpr int16_t WALL_THRESHOLD = 35;
+
+        int32_t level = player.get_skilllevel(skillid);
+        const SkillData::Stats& stats = SkillData::get(skillid).get_stats(level);
+        int16_t range = static_cast<int16_t>(stats.hrange * 100.0f);
+        if (range <= 0)
+            range = 130;
+
+        bool up = player.is_key_down(KeyAction::UP);
+        bool down = player.is_key_down(KeyAction::DOWN);
+        bool left = player.is_key_down(KeyAction::LEFT);
+        bool right = player.is_key_down(KeyAction::RIGHT);
+
+        Point<int16_t> current = player.get_position();
+        Point<int16_t> target = current;
+
+        if (up && !left && !right)
+        {
+            // UP: find the nearest platform above within range.
+            // Search from (x, y - range); get_y_below returns the closest
+            // foothold at or below that point — i.e. a platform above us.
+            Point<int16_t> above = physics.get_y_below(
+                Point<int16_t>(current.x(), current.y() - range)
+            );
+            if (above.y() < current.y() - 5)
+            {
+                target = above;
+            }
+        }
+        else if (down && !left && !right)
+        {
+            // DOWN: drop through current platform to the one below.
+            // Searching from y+3 skips the current foothold (ground_y ≈ y+1).
+            Point<int16_t> below = physics.get_y_below(
+                Point<int16_t>(current.x(), current.y() + 3)
+            );
+            if (below.y() > current.y() + 5
+                && below.y() - current.y() <= range)
+            {
+                target = below;
+            }
+        }
+        else
+        {
+            // HORIZONTAL: sweep toward target, stop at walls.
+            int16_t direction = player.getflip() ? 1 : -1;
+            if (left)
+                direction = -1;
+            else if (right)
+                direction = 1;
+
+            Range<int16_t> map_walls = physics.get_fht().get_walls();
+            int16_t prev_ground = current.y();
+            int16_t num_steps = range / STEP;
+
+            for (int16_t i = 1; i <= num_steps; i++)
+            {
+                int16_t test_x = static_cast<int16_t>(
+                    std::clamp<int32_t>(
+                        current.x() + direction * i * STEP,
+                        map_walls.first(), map_walls.second()
+                    )
+                );
+
+                int16_t ground_y = physics.get_y_below(
+                    Point<int16_t>(test_x, prev_ground - 30)
+                ).y();
+
+                if (std::abs(static_cast<int32_t>(ground_y)
+                           - static_cast<int32_t>(prev_ground)) > WALL_THRESHOLD)
+                    break;
+
+                target = Point<int16_t>(test_x, ground_y);
+                prev_ground = ground_y;
+            }
+        }
+
+        if (target != current)
+        {
+            // Show blue teleport flash from Effect.nx.
+            static Animation tp_effect(
+                nl::nx::effect["BasicEff.img"]["Teleport"]
+            );
+            player.show_attack_effect(tp_effect, 0);
+
+            player.set_position(target);
+            PhysicsObject& phobj = player.get_phobj();
+            phobj.hspeed = 0.0;
+            phobj.vspeed = 0.0;
+            phobj.fhid = 0;
+        }
+
+        teleport_cooldown = TELEPORT_CD;
     }
 
     void Stage::handle_directional_context(KeyAction::Id action, bool down)
@@ -429,7 +539,17 @@ namespace jrc
             break;
         }
         case KeyType::SKILL:
-            combat.use_move(action);
+            if (is_teleport_skill(action))
+            {
+                if (teleport_cooldown == 0 && combat.use_move(action))
+                {
+                    apply_teleport(action);
+                }
+            }
+            else
+            {
+                combat.use_move(action);
+            }
             break;
         case KeyType::ITEM:
             player.use_item(action);

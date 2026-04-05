@@ -101,6 +101,8 @@ namespace jrc
         void check_portals();
         void check_seats();
         void check_ladders(bool up);
+        void apply_teleport(int32_t skillid);
+        static bool is_teleport_skill(int32_t skillid);
         void handle_held_actions();
         void handle_directional_context(KeyAction::Id action, bool down);
         void update_directional_context();
@@ -138,6 +140,7 @@ namespace jrc
         MapEffect effect;
 
         Combat combat;
+        int16_t teleport_cooldown = 0;
         int32_t pending_intro_warp_mapid;
         int32_t pending_intro_warp_delay_ms;
     };
