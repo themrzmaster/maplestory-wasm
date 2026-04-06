@@ -275,4 +275,16 @@ namespace jrc
 
         Stage::get().get_player().add_cooldown(skill_id, cooltime);
     }
+
+
+    void AdminResultHandler::handle(InPacket& recv) const
+    {
+        int8_t type = recv.read_byte();
+
+        if (type == 0x10)
+        {
+            int8_t mode = recv.read_byte();
+            Stage::get().get_player().set_gm_hidden(mode == 1);
+        }
+    }
 }

@@ -32,6 +32,10 @@ namespace jrc
             float rgb = 0.9f - 0.5f * std::abs(sinf(phi));
             color = { rgb, rgb, rgb, 1.0f };
         }
+        else if (is_hidden())
+        {
+            color = { 1.0f, 1.0f, 1.0f, 0.4f };
+        }
         else
         {
             color = Color::WHITE;

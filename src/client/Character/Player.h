@@ -71,6 +71,10 @@ namespace jrc
         /// Use the item from the player's inventory with the given id.
         void use_item(int32_t itemid);
 
+        /// Check whether the player is hidden (GM hide / Dark Sight).
+        bool is_hidden() const override;
+        /// Set GM hidden state (from ADMIN_RESULT packet).
+        void set_gm_hidden(bool hidden);
         /// Return if the player is attacking.
         bool is_attacking() const;
         /// Return wether the player can attack or not.
@@ -180,5 +184,6 @@ namespace jrc
 
         Optional<const Ladder> ladder;
         bool underwater;
+        bool gm_hidden = false;
     };
 }

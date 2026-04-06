@@ -51,6 +51,8 @@ namespace jrc
 
         /// Check wether the character is invincible.
         virtual bool is_invincible() const;
+        /// Check whether the character is hidden (GM hide / Dark Sight).
+        virtual bool is_hidden() const { return false; }
         /// Return the character's level.
         virtual uint16_t get_level() const = 0;
         /// Return the character's level.
