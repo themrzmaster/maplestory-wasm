@@ -37,6 +37,7 @@ namespace jrc
         void draw(float inter) const override;
         bool is_in_range(Point<int16_t> cursorpos) const override;
         void send_key(int32_t keycode, bool pressed, bool escape) override;
+        void send_scroll(double yoffset) override;
         CursorResult send_cursor(bool clicked, Point<int16_t> cursorpos) override;
 
         void change_text(int32_t npcid, int8_t msgtype, int16_t style, int8_t speaker, const std::string& text);
@@ -85,5 +86,7 @@ namespace jrc
         std::vector<int32_t> selections;
         int32_t selected;
         int32_t hovered_selection;
+        int16_t scroll_offset;
+        int16_t max_scroll;
     };
 }
