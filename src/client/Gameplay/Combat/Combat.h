@@ -22,6 +22,7 @@
 
 #include "../MapleMap/MapChars.h"
 #include "../MapleMap/MapMobs.h"
+#include "../Physics/Physics.h"
 
 #include "../../Character/Player.h"
 #include "../../Template/TimedQueue.h"
@@ -31,7 +32,8 @@ namespace jrc
     class Combat
     {
     public:
-        Combat(Player& player, MapChars& chars, MapMobs& mobs);
+        Combat(Player& player, MapChars& chars, MapMobs& mobs,
+            Physics& physics);
 
         // Draw bullets, damage numbers etc.
         void draw(double viewx, double viewy, float alpha) const;
@@ -40,6 +42,8 @@ namespace jrc
 
         // Make the player use a special move. Returns true if the move was used.
         bool use_move(int32_t move_id);
+        // Reset transient state (e.g. on map change).
+        void clear();
 
         // Add an attack to the attack queue.
         void push_attack(const AttackResult& attack);
@@ -77,12 +81,20 @@ namespace jrc
         std::vector<DamageNumber> place_numbers(int32_t oid, const std::vector<std::pair<int32_t, bool>>& damagelines);
         const SpecialMove& get_move(int32_t move_id);
 
+        static bool is_teleport_skill(int32_t skillid);
+        void apply_teleport(int32_t skillid);
+        Point<int16_t> find_teleport_target(int16_t range);
+        Point<int16_t> find_teleport_target_vertical(bool up, int16_t range);
+        Point<int16_t> find_teleport_target_horizontal(int16_t range);
+
         Player& player;
         MapChars& chars;
         MapMobs& mobs;
+        Physics& physics;
 
         std::unordered_map<int32_t, Skill> skills;
         RegularAttack regularattack;
+        int16_t teleport_cooldown = 0;
 
         TimedQueue<AttackResult> attackresults;
         TimedQueue<BulletEffect> bulleteffects;
