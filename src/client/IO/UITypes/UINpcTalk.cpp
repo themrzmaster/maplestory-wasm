@@ -454,7 +454,7 @@ namespace jrc
             }
             break;
         case END:
-            NpcTalkMorePacket(type, static_cast<int8_t>(-1)).dispatch();
+            NpcTalkMorePacket(type, end_confirms_dialogue ? 1 : 0).dispatch();
             active = false;
             break;
         }
@@ -606,6 +606,15 @@ namespace jrc
             end_confirms_dialogue = true;
         }
 
+        // Same fallback for accept/decline prompts when YES/NO buttons fail
+        // to render in some WZ/UI variants: END acts as accept so flow advances.
+        if ((msgtype == 1 || msgtype == 12) &&
+            !has_visible_action_button(YES) &&
+            !has_visible_action_button(NO))
+        {
+            end_confirms_dialogue = true;
+        }
+
         type = msgtype;
 
         dimension = { top.width(), static_cast<int16_t>(top.height() + height + bottom.height()) };
@@ -624,7 +633,7 @@ namespace jrc
         }
 
         active = false;
-        NpcTalkMorePacket(type, static_cast<int8_t>(-1)).dispatch();
+        NpcTalkMorePacket(type, 0).dispatch();
     }
 
     void UINpcTalk::send_scroll(double yoffset)
