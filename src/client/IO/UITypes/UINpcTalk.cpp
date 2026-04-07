@@ -50,6 +50,27 @@ namespace jrc
         constexpr int8_t SELECTION_DIALOGUE_TYPE = 4;
         constexpr int8_t LEGACY_SELECTION_DIALOGUE_TYPE = 5;
 
+        // Zero-parameter formatting tokens: bold, color switches, etc.
+        // These must be handled before number-parsing to avoid greedily
+        // consuming content like #e1000#k → stripping "1000".
+        bool is_formatting_token(char ch)
+        {
+            switch (std::tolower(static_cast<unsigned char>(ch)))
+            {
+            case 'b':  // blue
+            case 'd':  // dark/purple
+            case 'e':  // bold on
+            case 'f':  // dark-grey
+            case 'g':  // green
+            case 'k':  // black
+            case 'n':  // normal
+            case 'r':  // red
+                return true;
+            default:
+                return false;
+            }
+        }
+
         bool is_selection_dialogue_type(int8_t msgtype)
         {
             // Cosmic-compatible servers have been observed using both values
@@ -267,7 +288,7 @@ namespace jrc
         }
     }
 
-    UINpcTalk::UINpcTalk() : selected(0), hovered_selection(-1)
+    UINpcTalk::UINpcTalk() : selected(0), hovered_selection(-1), scroll_offset(0), max_scroll(0)
     {
         nl::node src = nl::nx::ui["UIWindow2.img"]["UtilDlgEx"];
 
@@ -301,30 +322,43 @@ namespace jrc
         speaker.draw({ position + Point<int16_t>(80, 100), true });
         nametag.draw(position + Point<int16_t>(25, 100));
         name.draw(position + Point<int16_t>(80, 99));
-        int16_t text_y = get_dialogue_text_y();
-        text.draw(position + Point<int16_t>(DIALOG_TEXT_X, text_y));
+
+        // Visible content bounds (relative to dialog position).
+        int16_t content_top = static_cast<int16_t>(top.height() + TEXT_VERTICAL_PADDING);
+        int16_t content_bottom = static_cast<int16_t>(top.height() + height - TEXT_VERTICAL_PADDING);
+
+        int16_t text_y = static_cast<int16_t>(get_dialogue_text_y() - scroll_offset);
+        if (text_y + text.height() > content_top && text_y < content_bottom)
+        {
+            text.draw(position + Point<int16_t>(DIALOG_TEXT_X, text_y));
+        }
 
         if (!selection_labels.empty())
         {
-            int16_t option_y = get_options_start_y();
+            int16_t option_y = static_cast<int16_t>(get_options_start_y() - scroll_offset);
             for (size_t i = 0; i < selection_labels.size(); ++i)
             {
                 const Text& option_label = selection_labels[i];
-                option_label.draw(position + Point<int16_t>(DIALOG_TEXT_X, option_y));
 
-                if (static_cast<int32_t>(i) == hovered_selection)
+                // Only draw options within visible content area.
+                if (option_y + option_label.height() > content_top && option_y < content_bottom)
                 {
-                    int16_t underline_width = std::min<int16_t>(
-                        TEXT_WIDTH,
-                        std::max<int16_t>(1, option_label.width())
-                    );
-                    GraphicsGL::get().drawrectangle(
-                        static_cast<int16_t>(position.x() + DIALOG_TEXT_X),
-                        static_cast<int16_t>(position.y() + option_y + option_label.height()),
-                        underline_width,
-                        HOVER_UNDERLINE_THICKNESS,
-                        1.0f, 0.5f, 0.0f, 1.0f
-                    );
+                    option_label.draw(position + Point<int16_t>(DIALOG_TEXT_X, option_y));
+
+                    if (static_cast<int32_t>(i) == hovered_selection)
+                    {
+                        int16_t underline_width = std::min<int16_t>(
+                            TEXT_WIDTH,
+                            std::max<int16_t>(1, option_label.width())
+                        );
+                        GraphicsGL::get().drawrectangle(
+                            static_cast<int16_t>(position.x() + DIALOG_TEXT_X),
+                            static_cast<int16_t>(position.y() + option_y + option_label.height()),
+                            underline_width,
+                            HOVER_UNDERLINE_THICKNESS,
+                            1.0f, 0.5f, 0.0f, 1.0f
+                        );
+                    }
                 }
 
                 option_y += option_label.height();
@@ -470,16 +504,33 @@ namespace jrc
             name.change_text("");
         }
 
+        scroll_offset = 0;
+
         int16_t minimum_fill_height = MIN_DIALOGUE_TILES * fill.height();
+        int16_t content_h = get_dialogue_content_height();
         int16_t required_fill_height = std::max<int16_t>(
             minimum_fill_height,
-            static_cast<int16_t>(get_dialogue_content_height() + TEXT_VERTICAL_PADDING * 2)
+            static_cast<int16_t>(content_h + TEXT_VERTICAL_PADDING * 2)
         );
         vtile = std::max<int16_t>(
             MIN_DIALOGUE_TILES,
             static_cast<int16_t>((required_fill_height + fill.height() - 1) / fill.height())
         );
+
+        // Cap dialog so it fits on screen (leave room for top/bottom chrome + margin).
+        int16_t max_fill = static_cast<int16_t>(
+            (Constants::viewheight() - top.height() - bottom.height() - 40) / fill.height()
+        );
+        if (max_fill > MIN_DIALOGUE_TILES && vtile > max_fill)
+        {
+            vtile = max_fill;
+        }
+
         height = vtile * fill.height();
+
+        // Calculate scrollable overflow.
+        int16_t visible_content = static_cast<int16_t>(height - TEXT_VERTICAL_PADDING * 2);
+        max_scroll = std::max<int16_t>(0, static_cast<int16_t>(content_h - visible_content));
 
         for (auto& button : buttons)
         {
@@ -583,6 +634,18 @@ namespace jrc
 
         active = false;
         NpcTalkMorePacket(type, 0).dispatch();
+    }
+
+    void UINpcTalk::send_scroll(double yoffset)
+    {
+        if (max_scroll <= 0)
+            return;
+
+        constexpr int16_t SCROLL_STEP = 24;
+        scroll_offset = std::clamp<int16_t>(
+            static_cast<int16_t>(scroll_offset - static_cast<int16_t>(yoffset * SCROLL_STEP)),
+            0, max_scroll
+        );
     }
 
     UIElement::CursorResult UINpcTalk::send_cursor(bool clicked, Point<int16_t> cursorpos)
@@ -753,7 +816,7 @@ namespace jrc
 
     int32_t UINpcTalk::get_option_at(Point<int16_t> relative) const
     {
-        int16_t options_y = get_options_start_y();
+        int16_t options_y = static_cast<int16_t>(get_options_start_y() - scroll_offset);
         for (size_t i = 0; i < selection_labels.size(); ++i)
         {
             int16_t option_height = selection_labels[i].height();
@@ -796,6 +859,12 @@ namespace jrc
             if (token == '#')
             {
                 stripped.push_back('#');
+                cursor += 2;
+                continue;
+            }
+
+            if (is_formatting_token(token))
+            {
                 cursor += 2;
                 continue;
             }
@@ -858,6 +927,13 @@ namespace jrc
             }
 
             char token = source[cursor + 1];
+
+            // Skip zero-parameter formatting tokens (#b, #e, #k, #n, #r, etc.)
+            if (is_formatting_token(token))
+            {
+                cursor += 2;
+                continue;
+            }
 
             if (token == 'h' || token == 'H')
             {
