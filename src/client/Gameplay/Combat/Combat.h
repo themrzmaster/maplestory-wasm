@@ -82,7 +82,7 @@ namespace jrc
         const SpecialMove& get_move(int32_t move_id);
 
         static bool is_teleport_skill(int32_t skillid);
-        void apply_teleport(int32_t skillid);
+        bool apply_teleport(const SpecialMove& move);
         Point<int16_t> find_teleport_target(int16_t range);
         Point<int16_t> find_teleport_target_vertical(bool up, int16_t range);
         Point<int16_t> find_teleport_target_horizontal(int16_t range);

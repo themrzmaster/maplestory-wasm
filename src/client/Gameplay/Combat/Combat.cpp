@@ -151,6 +151,18 @@ namespace jrc
 
             AttackPacket(result).dispatch();
         }
+        else if (is_teleport_skill(move.get_id()))
+        {
+            if (apply_teleport(move))
+            {
+                move.apply_useeffects(player);
+                move.apply_actions(player, Attack::MAGIC);
+
+                int32_t moveid = move.get_id();
+                int32_t level = player.get_skills().get_level(moveid);
+                UseSkillPacket(moveid, level).dispatch();
+            }
+        }
         else
         {
             move.apply_useeffects(player);
@@ -168,11 +180,6 @@ namespace jrc
     {
         switch (move.get_id())
         {
-        case SkillId::TELEPORT_FP:
-        case SkillId::IL_TELEPORT:
-        case SkillId::PRIEST_TELEPORT:
-            apply_teleport(move.get_id());
-            break;
         case SkillId::FLASH_JUMP:
             break;
         }
@@ -185,8 +192,9 @@ namespace jrc
             || skillid == SkillId::PRIEST_TELEPORT;
     }
 
-    void Combat::apply_teleport(int32_t skillid)
+    bool Combat::apply_teleport(const SpecialMove& move)
     {
+        int32_t skillid = move.get_id();
         int32_t level = player.get_skilllevel(skillid);
         const SkillData::Stats& stats = SkillData::get(skillid).get_stats(level);
         int16_t range = static_cast<int16_t>(stats.hrange * 100.0f);
@@ -196,21 +204,22 @@ namespace jrc
         Point<int16_t> current = player.get_position();
         Point<int16_t> target = find_teleport_target(range);
 
-        if (target != current)
-        {
-            static Animation tp_effect(
-                nl::nx::effect["BasicEff.img"]["Teleport"]
-            );
-            player.show_attack_effect(tp_effect, 0);
+        if (target == current)
+            return false;
 
-            player.set_position(target);
-            PhysicsObject& phobj = player.get_phobj();
-            phobj.hspeed = 0.0;
-            phobj.vspeed = 0.0;
-            phobj.fhid = 0;
-        }
+        static Animation tp_effect(
+            nl::nx::effect["BasicEff.img"]["Teleport"]
+        );
+        player.show_attack_effect(tp_effect, 0);
+
+        player.set_position(target);
+        PhysicsObject& phobj = player.get_phobj();
+        phobj.hspeed = 0.0;
+        phobj.vspeed = 0.0;
+        phobj.fhid = 0;
 
         teleport_cooldown = TELEPORT_COOLDOWN_TICKS;
+        return true;
     }
 
     Point<int16_t> Combat::find_teleport_target(int16_t range)
@@ -220,7 +229,10 @@ namespace jrc
         bool left = player.is_key_down(KeyAction::LEFT);
         bool right = player.is_key_down(KeyAction::RIGHT);
 
-        if ((up || down) && !left && !right)
+        if (left || right)
+            return find_teleport_target_horizontal(range);
+
+        if (up || down)
             return find_teleport_target_vertical(up, range);
 
         return find_teleport_target_horizontal(range);
@@ -232,17 +244,23 @@ namespace jrc
 
         if (up)
         {
+            // Search from above: get_y_below finds the nearest foothold
+            // at or below (y - range), i.e. a platform above us.
             Point<int16_t> above = physics.get_y_below(
                 Point<int16_t>(current.x(), current.y() - range)
             );
+            // 5px dead-zone avoids teleporting onto the same platform.
             if (above.y() < current.y() - 5)
                 return above;
         }
         else
         {
+            // +3px skips the current foothold (ground contact is ~y+1)
+            // so get_y_below finds the next platform below.
             Point<int16_t> below = physics.get_y_below(
                 Point<int16_t>(current.x(), current.y() + 3)
             );
+            // 5px dead-zone, and cap at teleport range.
             if (below.y() > current.y() + 5
                 && below.y() - current.y() <= range)
                 return below;
@@ -274,6 +292,8 @@ namespace jrc
                 )
             );
 
+            // -30px searches from above the previous ground level so we
+            // snap to the same foothold layer, not one far below.
             int16_t ground_y = physics.get_y_below(
                 Point<int16_t>(test_x, prev_ground - 30)
             ).y();
