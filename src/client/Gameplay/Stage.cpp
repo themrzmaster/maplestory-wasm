@@ -18,7 +18,6 @@
 #include "Stage.h"
 
 #include "../Audio/Audio.h"
-#include "../Character/SkillId.h"
 #include "../IO/KeyAction.h"
 #include "../IO/Messages.h"
 #include "../Net/Packets/GameplayPackets.h"
@@ -27,7 +26,6 @@
 
 #include "nlnx/nx.hpp"
 
-#include <algorithm>
 #include <chrono>
 
 namespace jrc
@@ -38,7 +36,7 @@ namespace jrc
     }
 
     Stage::Stage()
-        : combat(player, chars, mobs)
+        : combat(player, chars, mobs, physics)
         , last_pickup_time(0)
         , pending_intro_warp_mapid(-1)
         , pending_intro_warp_delay_ms(0)
@@ -84,6 +82,7 @@ namespace jrc
         pending_intro_warp_mapid = -1;
         pending_intro_warp_delay_ms = 0;
 
+        combat.clear();
         chars.clear();
         npcs.clear();
         mobs.clear();
