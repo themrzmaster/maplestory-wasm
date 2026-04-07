@@ -125,6 +125,7 @@ namespace jrc
         TOGGLE_UI             = 222,
 
         // Player
+        ADMIN_RESULT = 144,
         ADD_COOLDOWN = 234,
 
         // Mapobject
@@ -202,6 +203,7 @@ namespace jrc
         emplace<RECALCULATE_STATS, RecalculateStatsHandler>();
         emplace<UPDATE_SKILL, UpdateSkillHandler>();
         emplace<ADD_COOLDOWN, AddCooldownHandler>();
+        emplace<ADMIN_RESULT, AdminResultHandler>();
 
         // Messaging handlers
         emplace<SHOW_STATUS_INFO, ShowStatusInfoHandler>();

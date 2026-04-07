@@ -370,6 +370,16 @@ namespace jrc
         }
     }
 
+    bool Player::is_hidden() const
+    {
+        return gm_hidden || has_buff(Buffstat::DARKSIGHT);
+    }
+
+    void Player::set_gm_hidden(bool hidden)
+    {
+        gm_hidden = hidden;
+    }
+
     bool Player::is_invincible() const
     {
         if (state == DIED)
@@ -377,7 +387,7 @@ namespace jrc
             return true;
         }
 
-        if (has_buff(Buffstat::DARKSIGHT))
+        if (is_hidden())
         {
             return true;
         }

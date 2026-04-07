@@ -105,4 +105,12 @@ namespace jrc
     {
         void handle(InPacket& recv) const override;
     };
+
+
+    // Handles GM admin results (hide, etc.).
+    // Opcode: ADMIN_RESULT(144)
+    class AdminResultHandler : public PacketHandler
+    {
+        void handle(InPacket& recv) const override;
+    };
 }
