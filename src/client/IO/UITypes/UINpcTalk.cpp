@@ -55,16 +55,16 @@ namespace jrc
         // consuming content like #e1000#k → stripping "1000".
         bool is_formatting_token(char ch)
         {
-            switch (ch)
+            switch (std::tolower(static_cast<unsigned char>(ch)))
             {
-            case 'b': case 'B':  // blue text
-            case 'd': case 'D':  // dark/purple text
-            case 'e': case 'E':  // bold on
-            case 'f': case 'F':  // dark-grey text
-            case 'g': case 'G':  // green text
-            case 'k': case 'K':  // black text (default)
-            case 'n': case 'N':  // normal (bold off)
-            case 'r': case 'R':  // red text
+            case 'b':  // blue
+            case 'd':  // dark/purple
+            case 'e':  // bold on
+            case 'f':  // dark-grey
+            case 'g':  // green
+            case 'k':  // black
+            case 'n':  // normal
+            case 'r':  // red
                 return true;
             default:
                 return false;
@@ -605,10 +605,6 @@ namespace jrc
         {
             end_confirms_dialogue = true;
         }
-
-        // For accept/decline prompts (type 1/12), END should always decline
-        // even when YES/NO buttons fail to render — confirming on close is
-        // surprising and can cause unintended item/meso transactions.
 
         type = msgtype;
 
