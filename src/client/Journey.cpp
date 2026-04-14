@@ -32,6 +32,7 @@
 #include "Net/Session.h"
 #include "Util/NxFiles.h"
 
+#include <algorithm>
 #include <iostream>
 
 
@@ -139,7 +140,11 @@ namespace jrc
             return;
         }
 
-        int64_t elapsed = Timer::get().stop();
+        // Clamp elapsed time so a backgrounded-then-resumed tab (where rAF was
+        // throttled) can't force thousands of catch-up update() calls in a
+        // single frame and freeze the main thread.
+        constexpr int64_t MAX_ELAPSED = static_cast<int64_t>(Constants::TIMESTEP) * 4 * 1000;
+        int64_t elapsed = std::min(Timer::get().stop(), MAX_ELAPSED);
 
         for (accumulator += elapsed; accumulator >= timestep; accumulator -= timestep)
             update();
@@ -178,9 +183,11 @@ namespace jrc
         int64_t period  = 0;
         int32_t samples = 0;
 
+        constexpr int64_t MAX_ELAPSED = static_cast<int64_t>(Constants::TIMESTEP) * 4 * 1000;
+
         while (running())
         {
-            int64_t elapsed = Timer::get().stop();
+            int64_t elapsed = std::min(Timer::get().stop(), MAX_ELAPSED);
 
             // Update game with constant timestep as many times as possible.
             for (accumulator += elapsed; accumulator >= timestep; accumulator -= timestep)
