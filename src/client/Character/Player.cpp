@@ -603,6 +603,11 @@ namespace jrc
         return stats;
     }
 
+    const CharStats* Player::get_stats_ptr() const
+    {
+        return &stats;
+    }
+
     Inventory& Player::get_inventory()
     {
         return inventory;

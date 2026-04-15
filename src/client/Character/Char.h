@@ -17,6 +17,8 @@
 
 namespace jrc
 {
+    class CharStats;
+
     /// Base for characters, e.g. the player and other clients on the same map.
     class Char : public LivingObject
     {
@@ -59,6 +61,8 @@ namespace jrc
         virtual int32_t get_skilllevel(int32_t skillid) const = 0;
         /// Return the character's base attacking speed.
         virtual int8_t get_integer_attackspeed() const = 0;
+        /// Return a CharStats pointer for the local player; nullptr for other chars.
+        virtual const CharStats* get_stats_ptr() const { return nullptr; }
 
         /// Return the attack speed as a multiplier.
         float get_real_attackspeed() const;

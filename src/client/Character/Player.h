@@ -147,6 +147,8 @@ namespace jrc
 
         /// Obtain a reference to the player's stats.
         CharStats& get_stats();
+        /// Expose stats polymorphically through Char.
+        const CharStats* get_stats_ptr() const override;
         /// Obtain a reference to the player's stats.
         const CharStats& get_stats() const;
         /// Obtain a reference to the player's inventory.

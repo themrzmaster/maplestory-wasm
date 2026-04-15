@@ -17,6 +17,8 @@
 //////////////////////////////////////////////////////////////////////////////
 #include "Skill.h"
 
+#include "../../Character/Char.h"
+#include "../../Character/CharStats.h"
 #include "../../Character/SkillId.h"
 #include "../../Data/SkillData.h"
 #include "../../Util/Misc.h"
@@ -189,15 +191,42 @@ namespace jrc
         {
             attack.matk += stats.matk;
             attack.damagetype = Attack::DMG_MAGIC;
-            // v83 magic damage is linear in the skill's `mad`: full formula
-            // is `(... INT/TMA terms ...) * skillAtk`. Player::prepare_attack
-            // populates attack.mindamage/maxdamage from CharStats' magic base
-            // (skillAtk = 1) for magicians, so scaling by the skill's `mad`
-            // here yields per-hit-line damage. attack.min/maxdamage are
-            // doubles, so the multiplication is lossless.
+            // v83 magic damage is linear in the skill's `mad`, so the full
+            // formula reduces to `(... INT/TMA terms ...) * skillAtk`. Min
+            // damage additionally depends on the skill's per-level `mastery`
+            // (WZ int 1-10 -> 15%-60%, unmastered floor 10%). Max is
+            // mastery-independent. v83 has no "Magic Mastery" passive, so we
+            // read the per-skill value from SkillData rather than a buff.
             double skill_atk = static_cast<double>(stats.matk);
-            attack.mindamage *= skill_atk;
-            attack.maxdamage *= skill_atk;
+            const CharStats* cstats = user.get_stats_ptr();
+            if (cstats && cstats->is_magician())
+            {
+                double mastery_frac =
+                    0.1 + static_cast<double>(stats.mastery) * 0.05;
+                if (mastery_frac > 1.0)
+                    mastery_frac = 1.0;
+
+                double tma =
+                    static_cast<double>(cstats->get_total(Equipstat::MAGIC));
+                double fint =
+                    static_cast<double>(cstats->get_total(Equipstat::INT));
+                double buff_mult =
+                    1.0 + static_cast<double>(cstats->get_damagepercent());
+
+                double max_base =
+                    ((tma * tma / 1000.0) + tma) / 30.0 + fint / 200.0;
+                double min_base =
+                    ((tma * tma / 1000.0) + tma * mastery_frac * 0.9)
+                        / 30.0 + fint / 200.0;
+
+                attack.maxdamage = max_base * buff_mult * skill_atk;
+                attack.mindamage = min_base * buff_mult * skill_atk;
+            }
+            else
+            {
+                attack.mindamage *= skill_atk;
+                attack.maxdamage *= skill_atk;
+            }
         }
         else
         {

@@ -70,6 +70,7 @@ namespace jrc
         float get_maxcrit() const;
         float get_reducedamage() const;
         float get_bossdmg() const;
+        float get_damagepercent() const;
         float get_ignoredef() const;
         void set_stance(float stance);
         float get_stance() const;

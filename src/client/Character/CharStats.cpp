@@ -358,6 +358,11 @@ namespace jrc
         return bossdmg;
     }
 
+    float CharStats::get_damagepercent() const
+    {
+        return damagepercent;
+    }
+
     float CharStats::get_ignoredef() const
     {
         return ignoredef;
