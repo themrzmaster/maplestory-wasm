@@ -41,7 +41,10 @@ namespace jrc
         attack.type = type;
         attack.attacker = cid;
 
-        attack.level = recv.read_byte();
+        // Level is an unsigned byte on the wire (cap 200). read_byte returns
+        // int8_t; cast before widening so 128+ doesn't wrap into a negative
+        // playerlevel when damage math uses it.
+        attack.level = static_cast<uint8_t>(recv.read_byte());
         attack.skill = (attack.level > 0) ? recv.read_int() : 0;
 
         attack.display = recv.read_byte();

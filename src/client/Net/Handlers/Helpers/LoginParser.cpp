@@ -118,7 +118,11 @@ namespace jrc
             statsentry.petids.push_back(recv.read_long());
         }
 
-        statsentry.stats[Maplestat::LEVEL] = recv.read_byte();
+        // Protocol encodes level as an unsigned byte (v83 cap 200). read_byte
+        // returns int8_t, so levels >= 128 sign-extend and wrap to 65408+ in
+        // the uint16_t basestats — which then narrows to negative in
+        // Attack::playerlevel and tanks hit/damage math. Force unsigned.
+        statsentry.stats[Maplestat::LEVEL] = static_cast<uint8_t>(recv.read_byte());
         statsentry.stats[Maplestat::JOB]   = recv.read_short();
         statsentry.stats[Maplestat::STR]   = recv.read_short();
         statsentry.stats[Maplestat::DEX]   = recv.read_short();

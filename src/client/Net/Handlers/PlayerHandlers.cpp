@@ -96,7 +96,9 @@ namespace jrc
             player.change_look(stat, recv.read_int());
             break;
         case Maplestat::LEVEL:
-            player.change_level(recv.read_byte());
+            // Level is an unsigned byte on the wire (cap 200). read_byte
+            // returns int8_t; cast before widening so 128+ doesn't wrap.
+            player.change_level(static_cast<uint8_t>(recv.read_byte()));
             break;
         case Maplestat::JOB:
             player.change_job(recv.read_short());
