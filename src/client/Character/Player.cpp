@@ -340,8 +340,19 @@ namespace jrc
 
         Attack attack;
         attack.type      = attacktype;
-        attack.mindamage = stats.get_mindamage();
-        attack.maxdamage = stats.get_maxdamage();
+        // Magicians use the v83 magic damage base (precomputed with
+        // skillAtk = 1). Skill::apply_stats later scales by the skill's
+        // `mad` because the formula is linear in skillAtk.
+        if (stats.is_magician())
+        {
+            attack.mindamage = stats.get_magic_base_min();
+            attack.maxdamage = stats.get_magic_base_max();
+        }
+        else
+        {
+            attack.mindamage = stats.get_mindamage();
+            attack.maxdamage = stats.get_maxdamage();
+        }
         if (degenerate)
         {
             attack.mindamage /= 10;

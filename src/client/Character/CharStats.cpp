@@ -49,6 +49,8 @@ namespace jrc
 
         maxdamage = 0;
         mindamage = 0;
+        magic_base_max = 0.0;
+        magic_base_min = 0.0;
         honor = 0;
         attackspeed = 0;
         projectilerange = 400;
@@ -83,6 +85,49 @@ namespace jrc
         float multiplier = damagepercent + static_cast<float>(attack) / 100;
         maxdamage = static_cast<int32_t>((primary + secondary) * multiplier);
         mindamage = static_cast<int32_t>(((primary * 0.9f * mastery) + secondary) * multiplier);
+
+        // v83 magic damage base (per hit line, skillAtk = 1). Linear in
+        // skillAtk, so Skill::apply_stats scales by the skill's `mad`.
+        //   MAX = ((TMA^2/1000 + TMA)                / 30 + INT/200)
+        //   MIN = ((TMA^2/1000 + TMA*mastery*0.9)    / 30 + INT/200)
+        // Stored as double: realistic base values are <3 and int truncation
+        // would zero out min damage.
+        if (is_magician())
+        {
+            double tma = static_cast<double>(get_total(Equipstat::MAGIC));
+            double fint = static_cast<double>(get_total(Equipstat::INT));
+            double buff_mult = 1.0 + static_cast<double>(damagepercent);
+            double max_base = ((tma * tma / 1000.0) + tma) / 30.0 + fint / 200.0;
+            double min_base = ((tma * tma / 1000.0)
+                              + tma * static_cast<double>(mastery) * 0.9)
+                              / 30.0 + fint / 200.0;
+            magic_base_max = max_base * buff_mult;
+            magic_base_min = min_base * buff_mult;
+        }
+        else
+        {
+            magic_base_max = 0.0;
+            magic_base_min = 0.0;
+        }
+    }
+
+    bool CharStats::is_magician() const
+    {
+        // (id / 100) % 10 == 2 catches classic Magicians (200-232) and
+        // Cygnus Blaze Wizard (1200-1212). Aran (2100+) and Legend (2000)
+        // correctly fall outside: their branches are warrior/beginner.
+        uint16_t branch = (job.get_id() / 100) % 10;
+        return branch == 2;
+    }
+
+    double CharStats::get_magic_base_max() const
+    {
+        return magic_base_max;
+    }
+
+    double CharStats::get_magic_base_min() const
+    {
+        return magic_base_min;
     }
 
     int32_t CharStats::calculateaccuracy() const

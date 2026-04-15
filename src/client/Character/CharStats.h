@@ -76,6 +76,13 @@ namespace jrc
         float get_resistance() const;
         int32_t get_maxdamage() const;
         int32_t get_mindamage() const;
+        // v83 magic damage per-hit range with skillAtk=1. Skill::apply_stats
+        // scales by the skill's WZ `mad` since the formula is linear in
+        // skillAtk. Kept as double because the base range is in [0, ~30] for
+        // low levels and int truncation would zero out min damage.
+        double get_magic_base_max() const;
+        double get_magic_base_min() const;
+        bool is_magician() const;
         uint16_t get_honor() const;
         void set_attackspeed(int8_t speed);
         int8_t get_attackspeed() const;
@@ -101,6 +108,8 @@ namespace jrc
         EnumMap<Equipstat::Id, float> percentages;
         int32_t maxdamage;
         int32_t mindamage;
+        double magic_base_max;
+        double magic_base_min;
         uint16_t honor;
         int8_t attackspeed;
         int16_t projectilerange;

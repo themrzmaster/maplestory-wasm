@@ -189,6 +189,15 @@ namespace jrc
         {
             attack.matk += stats.matk;
             attack.damagetype = Attack::DMG_MAGIC;
+            // v83 magic damage is linear in the skill's `mad`: full formula
+            // is `(... INT/TMA terms ...) * skillAtk`. Player::prepare_attack
+            // populates attack.mindamage/maxdamage from CharStats' magic base
+            // (skillAtk = 1) for magicians, so scaling by the skill's `mad`
+            // here yields per-hit-line damage. attack.min/maxdamage are
+            // doubles, so the multiplication is lossless.
+            double skill_atk = static_cast<double>(stats.matk);
+            attack.mindamage *= skill_atk;
+            attack.maxdamage *= skill_atk;
         }
         else
         {
