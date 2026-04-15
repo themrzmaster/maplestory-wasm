@@ -4,29 +4,75 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AugurMS</title>
+    <title>AugurMS — Browser Client</title>
+    <link rel="icon" href="/web/logo.png" type="image/png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --augur-bg: #0b0d16;
-            --augur-bg-2: #131626;
-            --augur-accent: #7aa2ff;
-            --augur-accent-2: #c7b7ff;
-            --augur-text: #e8ecf8;
-            --augur-muted: #8892b0;
+            --bg-primary: #0a0a12;
+            --bg-secondary: #12121f;
+            --bg-card: #1a1a2e;
+            --border: #2a2a45;
+            --gold: #f5c542;
+            --orange: #fb923c;
+            --blue: #4a9eff;
+            --purple: #a78bfa;
+            --red: #ff5c5c;
+            --text-primary: #e8e8f0;
+            --text-secondary: #8888a8;
+            --text-muted: #55556a;
         }
+
+        * { box-sizing: border-box; }
 
         body {
             margin: 0;
             padding: 0;
-            background: var(--augur-bg);
+            background: var(--bg-primary);
             display: flex;
             align-items: center;
             justify-content: center;
             height: 100vh;
             width: 100vw;
             overflow: hidden;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            color: var(--augur-text);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            color: var(--text-primary);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Ambient blurred glows shared by boot + browser-block screens */
+        .ambient {
+            position: fixed;
+            inset: 0;
+            overflow: hidden;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .ambient::before, .ambient::after, .ambient > span {
+            content: '';
+            position: absolute;
+            border-radius: 9999px;
+            filter: blur(80px);
+            opacity: 0.08;
+        }
+        .ambient::before {
+            top: -25%; left: 50%;
+            width: 800px; height: 800px;
+            background: var(--gold);
+            transform: translateX(-50%);
+        }
+        .ambient::after {
+            bottom: -10%; right: -15%;
+            width: 600px; height: 600px;
+            background: var(--blue);
+        }
+        .ambient > span {
+            top: 30%; left: -15%;
+            width: 600px; height: 600px;
+            background: var(--purple);
+            display: block;
         }
 
         #container {
@@ -51,12 +97,11 @@
         #boot {
             position: fixed;
             inset: 0;
-            background: radial-gradient(ellipse at center, var(--augur-bg-2) 0%, var(--augur-bg) 70%);
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 28px;
+            gap: 32px;
             z-index: 1000;
             opacity: 1;
             transition: opacity 400ms ease;
@@ -71,54 +116,63 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 6px;
+            gap: 14px;
+        }
+
+        #boot-logo {
+            width: 96px;
+            height: 96px;
+            filter: drop-shadow(0 0 24px rgba(245, 197, 66, 0.35));
         }
 
         #boot-title {
-            font-size: 44px;
-            letter-spacing: 10px;
-            font-weight: 300;
-            background: linear-gradient(90deg, var(--augur-accent) 0%, var(--augur-accent-2) 100%);
+            font-size: 36px;
+            letter-spacing: 2px;
+            font-weight: 700;
+            background: linear-gradient(90deg, var(--gold) 0%, var(--orange) 50%, var(--gold) 100%);
             -webkit-background-clip: text;
             background-clip: text;
             color: transparent;
             text-transform: uppercase;
-            padding-left: 10px; /* offset letter-spacing on right */
         }
 
         #boot-subtitle {
             font-size: 11px;
-            color: var(--augur-muted);
-            letter-spacing: 6px;
+            color: var(--text-secondary);
+            letter-spacing: 5px;
             text-transform: uppercase;
+            font-weight: 500;
         }
 
         #boot-bar-wrap {
             width: min(420px, 70vw);
             height: 4px;
-            background: rgba(255, 255, 255, 0.07);
+            background: var(--bg-card);
             border-radius: 4px;
             overflow: hidden;
+            box-shadow: 0 0 0 1px var(--border);
         }
 
         #boot-bar {
             height: 100%;
             width: 0%;
-            background: linear-gradient(90deg, var(--augur-accent), var(--augur-accent-2));
+            background: linear-gradient(90deg, var(--gold), var(--orange));
+            box-shadow: 0 0 16px rgba(245, 197, 66, 0.4);
             transition: width 120ms ease-out;
         }
 
         #boot-status {
             font-size: 12px;
-            color: var(--augur-muted);
+            color: var(--text-secondary);
             letter-spacing: 1px;
             text-align: center;
             min-height: 16px;
+            font-weight: 500;
         }
 
         #boot-detail {
             font-size: 11px;
-            color: rgba(255, 255, 255, 0.25);
+            color: var(--text-muted);
             font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
             min-height: 14px;
         }
@@ -126,13 +180,13 @@
         /* Corner indicator for background asset prefill */
         #prefill {
             position: fixed;
-            bottom: 10px;
-            right: 12px;
-            padding: 6px 10px;
-            background: rgba(11, 13, 22, 0.72);
-            border: 1px solid rgba(122, 162, 255, 0.3);
-            border-radius: 6px;
-            color: rgba(232, 236, 248, 0.85);
+            bottom: 12px;
+            right: 14px;
+            padding: 8px 12px;
+            background: rgba(26, 26, 46, 0.85);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-secondary);
             font-size: 10px;
             font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
             z-index: 500;
@@ -141,7 +195,8 @@
             transition: opacity 400ms ease;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
+            backdrop-filter: blur(8px);
         }
 
         #prefill.visible { opacity: 1; }
@@ -149,7 +204,7 @@
         #prefill-bar-wrap {
             width: 80px;
             height: 3px;
-            background: rgba(255, 255, 255, 0.1);
+            background: var(--bg-secondary);
             border-radius: 3px;
             overflow: hidden;
         }
@@ -157,20 +212,121 @@
         #prefill-bar {
             height: 100%;
             width: 0%;
-            background: linear-gradient(90deg, var(--augur-accent), var(--augur-accent-2));
+            background: linear-gradient(90deg, var(--gold), var(--orange));
             transition: width 250ms ease-out;
+        }
+
+        /* ===== Browser-block overlay ===== */
+        #browser-block {
+            position: fixed;
+            inset: 0;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+            z-index: 2000;
+            padding: 40px 20px;
+            text-align: center;
+        }
+        #browser-block.visible { display: flex; }
+
+        #block-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 40px 36px;
+            max-width: 460px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 18px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+        #block-logo {
+            width: 72px;
+            height: 72px;
+            filter: drop-shadow(0 0 20px rgba(245, 197, 66, 0.3));
+        }
+        #block-title {
+            font-size: 22px;
+            font-weight: 700;
+            background: linear-gradient(90deg, var(--gold), var(--orange));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin: 0;
+        }
+        #block-message {
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.6;
+            margin: 0;
+        }
+        #block-detected {
+            color: var(--text-muted);
+            font-size: 11px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            background: var(--bg-secondary);
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            word-break: break-all;
+        }
+        .block-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+            margin-top: 8px;
+        }
+        .block-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+            font-family: inherit;
+            transition: all 160ms ease;
+        }
+        .block-btn-primary {
+            background: linear-gradient(90deg, var(--gold), var(--orange));
+            color: var(--bg-primary);
+            box-shadow: 0 0 24px rgba(245, 197, 66, 0.25);
+        }
+        .block-btn-primary:hover {
+            box-shadow: 0 0 32px rgba(245, 197, 66, 0.45);
+            transform: translateY(-1px);
+        }
+        .block-btn-ghost {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+            font-size: 12px;
+        }
+        .block-btn-ghost:hover {
+            color: var(--text-secondary);
+            border-color: var(--text-muted);
         }
     </style>
 </head>
 
 <body>
+    <div class="ambient"><span></span></div>
+
     <div id="container">
         <canvas id="canvas" tabindex="-1"></canvas>
     </div>
 
     <div id="boot">
         <div id="boot-brand">
-            <div id="boot-title">Augur MS</div>
+            <img id="boot-logo" src="/web/logo.png" alt="AugurMS">
+            <div id="boot-title">AugurMS</div>
             <div id="boot-subtitle">Browser Client</div>
         </div>
         <div id="boot-bar-wrap"><div id="boot-bar"></div></div>
@@ -184,9 +340,86 @@
         <span id="prefill-pct">0%</span>
     </div>
 
+    <div id="browser-block">
+        <div id="block-card">
+            <img id="block-logo" src="/web/logo.png" alt="AugurMS">
+            <h1 id="block-title">Chrome required</h1>
+            <p id="block-message">
+                The AugurMS browser client is built and tested on Google Chrome.
+                Other browsers can render the page but stream NX assets and WebGL
+                in inconsistent ways that crash the game mid-session.
+                <br><br>
+                Open this page in Chrome, or download the native launcher from
+                <strong>augurms.com</strong> for the smoothest experience.
+            </p>
+            <div id="block-detected"></div>
+            <div class="block-actions">
+                <a class="block-btn block-btn-primary" href="https://www.google.com/chrome/" target="_blank" rel="noopener">
+                    Download Chrome
+                </a>
+                <a class="block-btn block-btn-primary" href="https://augurms.com/" target="_blank" rel="noopener" style="background: transparent; color: var(--gold); box-shadow: none; border: 1px solid var(--gold);">
+                    Get the native launcher
+                </a>
+                <button class="block-btn block-btn-ghost" id="block-override">Continue anyway (unsupported)</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/web/prefetcher.js"></script>
 
     <script>
+        // ===== Chrome gate =====
+        // Only Chromium-based browsers reliably handle the WASM client's WebGL +
+        // SharedArrayBuffer-free Asyncify model. Strict Google Chrome detection;
+        // users on Edge/Brave/Opera can opt in via the override button.
+        function detectBrowser() {
+            const ua = navigator.userAgent;
+            const data = navigator.userAgentData;
+            // Modern UA-CH: trustworthy on Chromium browsers
+            if (data && Array.isArray(data.brands)) {
+                const isStrictChrome = data.brands.some((b) => b.brand === 'Google Chrome');
+                if (isStrictChrome) return { ok: true, label: 'Chrome' };
+                const otherChromium = data.brands.find((b) =>
+                    /Microsoft Edge|Opera|Brave/i.test(b.brand)
+                );
+                if (otherChromium) {
+                    return { ok: false, label: otherChromium.brand };
+                }
+            }
+            // Fallback UA-string heuristics
+            if (/Edg\//.test(ua)) return { ok: false, label: 'Microsoft Edge' };
+            if (/OPR\/|Opera/.test(ua)) return { ok: false, label: 'Opera' };
+            if (/Vivaldi/.test(ua)) return { ok: false, label: 'Vivaldi' };
+            if (/YaBrowser/.test(ua)) return { ok: false, label: 'Yandex Browser' };
+            if (/SamsungBrowser/.test(ua)) return { ok: false, label: 'Samsung Internet' };
+            if (/UCBrowser/.test(ua)) return { ok: false, label: 'UC Browser' };
+            if (/Firefox\//.test(ua)) return { ok: false, label: 'Firefox' };
+            if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) return { ok: false, label: 'Safari' };
+            if (/Chrome\/\d/.test(ua)) return { ok: true, label: 'Chrome' };
+            return { ok: false, label: 'Unknown browser' };
+        }
+
+        const detected = detectBrowser();
+        const overrideKey = 'augurms.browserOverride';
+        const userOverrode = (() => {
+            try { return localStorage.getItem(overrideKey) === '1'; } catch { return false; }
+        })();
+
+        if (!detected.ok && !userOverrode) {
+            document.getElementById('boot').style.display = 'none';
+            const block = document.getElementById('browser-block');
+            block.classList.add('visible');
+            document.getElementById('block-detected').textContent =
+                'Detected: ' + detected.label;
+            document.getElementById('block-override').addEventListener('click', () => {
+                try { localStorage.setItem(overrideKey, '1'); } catch {}
+                location.reload();
+            });
+            // Stop here — do not boot WASM.
+            throw new Error('augurms: browser not supported (' + detected.label + ')');
+        }
+
+        // ===== Canvas sizing =====
         (function () {
             const GAME_WIDTH = 800;
             const GAME_HEIGHT = 600;
