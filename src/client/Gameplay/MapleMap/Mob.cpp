@@ -665,6 +665,19 @@ namespace jrc
         return hitchance;
     }
 
+    float Mob::calculate_magic_hitchance(int16_t leveldelta, int32_t magic_accuracy) const
+    {
+        // v83 magical hit: (floor(INT/10)+floor(LUK/10)) / ((avoid+1) * (1+0.0415*D)).
+        float denom = (static_cast<float>(avoid) + 1.0f)
+                    * (1.0f + 0.0415f * static_cast<float>(leveldelta));
+        float hitchance = static_cast<float>(magic_accuracy) / denom;
+        if (hitchance < 0.01f)
+        {
+            hitchance = 0.01f;
+        }
+        return hitchance;
+    }
+
     double Mob::calculate_mindamage(int16_t leveldelta, double damage, bool magic) const
     {
         double mindamage = magic ?
@@ -699,10 +712,15 @@ namespace jrc
         switch (damagetype)
         {
         case Attack::DMG_WEAPON:
-        case Attack::DMG_MAGIC:
-            mindamage = calculate_mindamage(leveldelta, attack.mindamage, damagetype == Attack::DMG_MAGIC);
-            maxdamage = calculate_maxdamage(leveldelta, attack.maxdamage, damagetype == Attack::DMG_MAGIC);
+            mindamage = calculate_mindamage(leveldelta, attack.mindamage, false);
+            maxdamage = calculate_maxdamage(leveldelta, attack.maxdamage, false);
             hitchance = calculate_hitchance(leveldelta, attack.accuracy);
+            critical  = attack.critical;
+            break;
+        case Attack::DMG_MAGIC:
+            mindamage = calculate_mindamage(leveldelta, attack.mindamage, true);
+            maxdamage = calculate_maxdamage(leveldelta, attack.maxdamage, true);
+            hitchance = calculate_magic_hitchance(leveldelta, attack.magic_accuracy);
             critical  = attack.critical;
             break;
         case Attack::DMG_FIXED:

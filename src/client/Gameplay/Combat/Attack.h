@@ -48,9 +48,13 @@ namespace jrc
         double maxdamage    = 1.0;
         float critical      = 0.0f;
         float ignoredef     = 0.0f;
-        int32_t matk        = 0;
-        int32_t accuracy    = 0;
-        int32_t fixdamage   = 0;
+        int32_t matk           = 0;
+        int32_t accuracy       = 0;
+        // v83 magic attacks use their own hit formula: (INT/10 + LUK/10)
+        // divided by ((avoid+1) * (1 + 0.0415*leveldelta)). The physical ACC
+        // stat is irrelevant for spells.
+        int32_t magic_accuracy = 0;
+        int32_t fixdamage      = 0;
         int16_t playerlevel = 1;
 
         uint8_t hitcount = 0;

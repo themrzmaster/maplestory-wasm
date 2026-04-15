@@ -350,6 +350,8 @@ namespace jrc
         attack.critical    = stats.get_critical();
         attack.ignoredef   = stats.get_ignoredef();
         attack.accuracy    = stats.get_total(Equipstat::ACC);
+        attack.magic_accuracy = (stats.get_total(Equipstat::INT) / 10)
+                              + (stats.get_total(Equipstat::LUK) / 10);
         attack.playerlevel = stats.get_stat(Maplestat::LEVEL);
         attack.range       = stats.get_range();
         attack.bullet      = inventory.get_bulletid();

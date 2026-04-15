@@ -114,8 +114,12 @@ namespace jrc
         /// Send the current position and state to the server.
         void update_movement();
 
-        /// Calculate the hit chance.
+        /// Calculate the hit chance for weapon (physical) attacks.
         float calculate_hitchance(int16_t leveldelta, int32_t accuracy) const;
+        /// Calculate the hit chance for magic attacks. v83 spells ignore the
+        /// player's physical ACC and instead use (floor(INT/10) + floor(LUK/10))
+        /// divided by ((avoid+1) * (1 + 0.0415 * leveldelta)).
+        float calculate_magic_hitchance(int16_t leveldelta, int32_t magic_accuracy) const;
         /// Calculate the minimum damage.
         double calculate_mindamage(int16_t leveldelta, double mindamage, bool magic) const;
         /// Calculate the maximum damage.
