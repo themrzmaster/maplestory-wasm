@@ -1,9 +1,10 @@
 {
-  "AssetsServerIP": null,
-  "AssetsServerPort": null,
-  "AssetsServerProtocol": null,
-  "MapleStoryServerIp": null,
-  "MapleStoryServerPort": null,
-  "ProxyIP": null,
-  "ProxyPort": null
+  "AssetsServerIP": "localhost",
+  "AssetsServerPort": 8765,
+  "AssetsServerProtocol": "ws",
+  "NxBaseUrl": "https://pub-34b8b332208f464a9e74fa14104be3e2.r2.dev/nx",
+  "MapleStoryServerIp": "213.188.212.103",
+  "MapleStoryServerPort": 8484,
+  "ProxyIP": "localhost",
+  "ProxyPort": 8080
 }

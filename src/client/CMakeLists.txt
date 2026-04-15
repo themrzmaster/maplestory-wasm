@@ -79,6 +79,15 @@ list(APPEND SOURCES
 
 add_executable(JourneyClient ${SOURCES})
 
+if(EMSCRIPTEN)
+    # Force the link step to re-run whenever lazyfs.js changes. Emscripten's
+    # --pre-js file isn't a compile input, so CMake wouldn't otherwise track it
+    # and an edit would silently produce a stale JourneyClient.js.
+    set_target_properties(JourneyClient PROPERTIES
+        LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/LazyFS/lazyfs.js"
+    )
+endif()
+
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     if(WARNINGS_AS_ERRORS)
         target_compile_options(JourneyClient PRIVATE

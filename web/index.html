@@ -4,12 +4,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MapleStory WASM Client</title>
+    <title>AugurMS</title>
     <style>
+        :root {
+            --augur-bg: #0b0d16;
+            --augur-bg-2: #131626;
+            --augur-accent: #7aa2ff;
+            --augur-accent-2: #c7b7ff;
+            --augur-text: #e8ecf8;
+            --augur-muted: #8892b0;
+        }
+
         body {
             margin: 0;
             padding: 0;
-            background-color: #000;
+            background: var(--augur-bg);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -17,7 +26,7 @@
             width: 100vw;
             overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            color: #fff;
+            color: var(--augur-text);
         }
 
         #container {
@@ -30,12 +39,126 @@
 
         #canvas {
             border: none;
-            background-color: #000;
+            background: #000;
             display: block;
             outline: none;
             cursor: none;
             image-rendering: pixelated;
             image-rendering: crisp-edges;
+        }
+
+        /* ===== Loading overlay ===== */
+        #boot {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(ellipse at center, var(--augur-bg-2) 0%, var(--augur-bg) 70%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 28px;
+            z-index: 1000;
+            opacity: 1;
+            transition: opacity 400ms ease;
+        }
+
+        #boot.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #boot-brand {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        #boot-title {
+            font-size: 44px;
+            letter-spacing: 10px;
+            font-weight: 300;
+            background: linear-gradient(90deg, var(--augur-accent) 0%, var(--augur-accent-2) 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-transform: uppercase;
+            padding-left: 10px; /* offset letter-spacing on right */
+        }
+
+        #boot-subtitle {
+            font-size: 11px;
+            color: var(--augur-muted);
+            letter-spacing: 6px;
+            text-transform: uppercase;
+        }
+
+        #boot-bar-wrap {
+            width: min(420px, 70vw);
+            height: 4px;
+            background: rgba(255, 255, 255, 0.07);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        #boot-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--augur-accent), var(--augur-accent-2));
+            transition: width 120ms ease-out;
+        }
+
+        #boot-status {
+            font-size: 12px;
+            color: var(--augur-muted);
+            letter-spacing: 1px;
+            text-align: center;
+            min-height: 16px;
+        }
+
+        #boot-detail {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.25);
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            min-height: 14px;
+        }
+
+        /* Corner indicator for background asset prefill */
+        #prefill {
+            position: fixed;
+            bottom: 10px;
+            right: 12px;
+            padding: 6px 10px;
+            background: rgba(11, 13, 22, 0.72);
+            border: 1px solid rgba(122, 162, 255, 0.3);
+            border-radius: 6px;
+            color: rgba(232, 236, 248, 0.85);
+            font-size: 10px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            z-index: 500;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 400ms ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #prefill.visible { opacity: 1; }
+
+        #prefill-bar-wrap {
+            width: 80px;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        #prefill-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--augur-accent), var(--augur-accent-2));
+            transition: width 250ms ease-out;
         }
     </style>
 </head>
@@ -45,16 +168,31 @@
         <canvas id="canvas" tabindex="-1"></canvas>
     </div>
 
+    <div id="boot">
+        <div id="boot-brand">
+            <div id="boot-title">Augur MS</div>
+            <div id="boot-subtitle">Browser Client</div>
+        </div>
+        <div id="boot-bar-wrap"><div id="boot-bar"></div></div>
+        <div id="boot-status">Connecting…</div>
+        <div id="boot-detail"></div>
+    </div>
+
+    <div id="prefill">
+        <span id="prefill-label">Caching assets</span>
+        <div id="prefill-bar-wrap"><div id="prefill-bar"></div></div>
+        <span id="prefill-pct">0%</span>
+    </div>
+
+    <script src="/web/prefetcher.js"></script>
+
     <script>
         (function () {
             const GAME_WIDTH = 800;
             const GAME_HEIGHT = 600;
 
             function syncCanvasResolution(canvas) {
-                if (canvas.width === GAME_WIDTH && canvas.height === GAME_HEIGHT) {
-                    return;
-                }
-
+                if (canvas.width === GAME_WIDTH && canvas.height === GAME_HEIGHT) return;
                 if (typeof Module !== 'undefined' && typeof Module.setCanvasSize === 'function') {
                     Module.setCanvasSize(GAME_WIDTH, GAME_HEIGHT);
                 } else {
@@ -66,146 +204,184 @@
             function getFittedCanvasSize(viewW, viewH) {
                 if (viewW * GAME_HEIGHT <= viewH * GAME_WIDTH) {
                     const width = Math.max(1, Math.floor(viewW));
-                    return {
-                        width,
-                        height: Math.max(1, Math.floor(width * GAME_HEIGHT / GAME_WIDTH))
-                    };
+                    return { width, height: Math.max(1, Math.floor(width * GAME_HEIGHT / GAME_WIDTH)) };
                 }
-
                 const height = Math.max(1, Math.floor(viewH));
-                return {
-                    width: Math.max(1, Math.floor(height * GAME_WIDTH / GAME_HEIGHT)),
-                    height
-                };
+                return { width: Math.max(1, Math.floor(height * GAME_WIDTH / GAME_HEIGHT)), height };
             }
 
             function fitCanvas() {
                 const canvas = document.getElementById('canvas');
-                if (!canvas) {
-                    return;
-                }
-
-                // Keep the render surface fixed and only scale it with CSS.
+                if (!canvas) return;
                 syncCanvasResolution(canvas);
-
                 const { width, height } = getFittedCanvasSize(window.innerWidth, window.innerHeight);
-
                 canvas.style.width = width + 'px';
                 canvas.style.height = height + 'px';
             }
 
-            window.MapleWasmUI = {
-                applyScale: fitCanvas
-            };
-
+            window.MapleWasmUI = { applyScale: fitCanvas };
             window.addEventListener('resize', fitCanvas);
             document.addEventListener('fullscreenchange', fitCanvas);
             fitCanvas();
         })();
 
+        // ===== Boot sequence =====
+        const bootBar = document.getElementById('boot-bar');
+        const bootStatus = document.getElementById('boot-status');
+        const bootDetail = document.getElementById('boot-detail');
+        const bootOverlay = document.getElementById('boot');
+
+        function setStatus(msg) { bootStatus.textContent = msg; }
+        function setDetail(msg) { bootDetail.textContent = msg; }
+        function setProgress(pct) { bootBar.style.width = Math.max(0, Math.min(100, pct)) + '%'; }
+        function formatMb(n) { return (n / 1024 / 1024).toFixed(1) + ' MB'; }
+
         Module = {
             canvas: (function () {
-                let canvas = document.getElementById('canvas');
-                canvas.addEventListener("webglcontextlost", function (e) {
-                    alert('WebGL context lost. You will need to reload the page.');
-                    e.preventDefault();
-                }, false);
-                canvas.addEventListener("click", function () {
-                    canvas.focus();
-                });
-                return canvas;
+                const c = document.getElementById('canvas');
+                c.addEventListener("webglcontextlost", (e) => { alert('WebGL context lost. Reload the page.'); e.preventDefault(); }, false);
+                c.addEventListener("click", () => c.focus());
+                return c;
             })(),
-
-            // Disable stdin to prevent annoying prompt() popups
-            preRun: [function () {
-                function stdin() {
-                    return null; // Return null for EOF
-                }
-                FS.init(stdin, null, null);
-            }],
-
-            print: function (text) {
-                console.log('[stdout]', text);
-            },
-
-            printErr: function (text) {
-                console.error('[stderr]', text);
-            },
-
-            setStatus: function (text) {
-                if (text) {
-                    console.log('[status]', text);
-                }
-            },
-
-            monitorRunDependencies: function (left) {
-                console.log('[dependencies]', left, 'remaining');
-            },
-
+            preRun: [function () { FS.init(() => null, null, null); }],
+            print: (t) => console.log('[stdout]', t),
+            printErr: (t) => console.error('[stderr]', t),
+            setStatus: () => { /* swallow noisy emscripten status */ },
+            monitorRunDependencies: (left) => console.log('[dependencies]', left, 'remaining'),
             onRuntimeInitialized: function () {
                 console.log('[runtime] Initialized');
-                if (window.MapleWasmUI && window.MapleWasmUI.applyScale) {
-                    window.MapleWasmUI.applyScale();
-                }
+                if (window.MapleWasmUI?.applyScale) window.MapleWasmUI.applyScale();
+                // NxFiles::init + nl::nx::load_all take ~1-2s after runtime init, during which
+                // nothing renders yet. Keep the overlay up to hide that black gap.
+                setStatus('Starting…');
+                setProgress(100);
+                setTimeout(() => {
+                    bootOverlay.classList.add('hidden');
+                    startBackgroundPrefill();
+                }, 2000);
             },
-
-            // Function to add C++ logs - now just console
             addCppLog: function (level, message) {
-                let timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
-                console.log('[' + timestamp + '] [' + level + '] ' + message);
+                const ts = new Date().toLocaleTimeString('en-US', { hour12: false });
+                console.log(`[${ts}] [${level}] ${message}`);
             }
         };
 
-        console.log('[status] Downloading...');
+        window.onerror = () => console.error('[post-exception status] Exception thrown, see JS console');
 
-        window.onerror = function (event) {
-            console.error('[post-exception status] Exception thrown, see JavaScript console');
-        };
+        // Background prefill order — hot files first so skill/UI interactions stop
+        // stalling quickly. Map.nx and Mob.nx together are ~60% of total size but only
+        // matter when entering a new map or fighting new mobs, so they're last.
+        const ALL_NX_FILES = [
+            'UI.nx',        // 419 MB — login, menus, skill tabs, hot
+            'Skill.nx',     // 171 MB — opened every time char sheet/skill UI shows
+            'Character.nx', // 364 MB — player sprite/equip frames
+            'Effect.nx',    // 120 MB — skill + hit effects
+            'Npc.nx',       // 126 MB — towns, shops
+            'Reactor.nx',   // 114 MB — map reactors
+            'Item.nx',      // 42 MB  — inventory icons
+            'Sound.nx',     // 346 MB — SFX, music
+            'Mob.nx',       // 1.1 GB — only when new mob seen
+            'Map.nx',       // 1.4 GB — only when entering new map
+            // Tiny files (already fully prefetched in foreground but harmless to verify):
+            'Base.nx', 'String.nx', 'Etc.nx', 'Morph.nx', 'Quest.nx', 'TamingMob.nx',
+        ];
 
-        // Fetch configuration before loading the client
-        fetch('/web/config.json')
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(config => {
-                if (config) {
-                    let hasConfig = false;
-                    const lazyConfig = {};
+        const prefillEl = document.getElementById('prefill');
+        const prefillBar = document.getElementById('prefill-bar');
+        const prefillPct = document.getElementById('prefill-pct');
+        const prefillLabel = document.getElementById('prefill-label');
 
-                    const lazyConfigKeys = [
-                        'AssetsServerIP', 'AssetsServerPort',
-                        'MapleStoryServerIp', 'MapleStoryServerPort',
-                        'ProxyIP', 'ProxyPort', 'AssetsServerProtocol'
-                    ];
-
-                    lazyConfigKeys.forEach(key => {
-                        if (config[key] !== undefined && config[key] !== null) {
-                            lazyConfig[key] = config[key];
-                            console.log(`[config] Set ${key} from config.json:`, config[key]);
-                            hasConfig = true;
-                        }
-                    });
-
-                    if (hasConfig) {
-                        Module.LazyFS = Object.assign(Module.LazyFS || {}, lazyConfig);
+        function startBackgroundPrefill() {
+            const baseUrl = Module.LazyFS?.NxBaseUrl;
+            if (!baseUrl || !window.AugurPrefetch?.prefetchBackground) return;
+            prefillEl.classList.add('visible');
+            window.AugurPrefetch.prefetchBackground({
+                baseUrl,
+                files: ALL_NX_FILES,
+                concurrency: 4, // Chrome allows ~6 per origin; 4 leaves room for on-demand LazyFS fetches
+                delayMs: 5000, // let the game settle for 5s before hammering R2
+                onProgress: ({ loadedBytes, totalBytes, phase }) => {
+                    if (!totalBytes) return;
+                    const pct = (loadedBytes / totalBytes) * 100;
+                    prefillBar.style.width = pct.toFixed(1) + '%';
+                    prefillPct.textContent = pct.toFixed(0) + '%';
+                    if (phase === 'done') {
+                        prefillLabel.textContent = 'Assets cached';
+                        setTimeout(() => prefillEl.classList.remove('visible'), 3000);
                     }
-                }
-                loadWasmClient();
-            })
-            .catch(err => {
-                console.warn('[config] Could not load /web/config.json, proceeding with defaults. Error:', err.message);
-                loadWasmClient();
+                },
+            }).catch((e) => {
+                console.warn('[prefill] background prefill failed:', e);
+                prefillLabel.textContent = 'Caching paused';
             });
+        }
 
-        function loadWasmClient() {
+        async function boot() {
+            setStatus('Connecting…');
+            setProgress(2);
+            // 1. Load config.json
+            let config = {};
+            try {
+                const res = await fetch('/web/config.json');
+                if (res.ok) config = await res.json();
+            } catch (e) {
+                console.warn('[config] failed:', e);
+            }
+
+            const lazyConfigKeys = [
+                'AssetsServerIP', 'AssetsServerPort',
+                'MapleStoryServerIp', 'MapleStoryServerPort',
+                'ProxyIP', 'ProxyPort', 'AssetsServerProtocol',
+                'NxBaseUrl'
+            ];
+            const lazyConfig = {};
+            for (const k of lazyConfigKeys) {
+                if (config[k] !== undefined && config[k] !== null) {
+                    lazyConfig[k] = config[k];
+                    console.log(`[config] ${k}:`, config[k]);
+                }
+            }
+            Module.LazyFS = Object.assign(Module.LazyFS || {}, lazyConfig);
+
+            // 2. Prefetch NX assets (if HTTP mode)
+            if (lazyConfig.NxBaseUrl && window.AugurPrefetch) {
+                setStatus('Preparing assets…');
+                setProgress(4);
+                try {
+                    await window.AugurPrefetch.prefetchAll({
+                        baseUrl: lazyConfig.NxBaseUrl,
+                        onProgress: ({ loadedBytes, totalBytes, file, phase }) => {
+                            const pct = totalBytes ? (loadedBytes / totalBytes) * 90 + 5 : 5; // reserve 5..95 for prefetch
+                            setProgress(pct);
+                            if (phase === 'done') {
+                                setStatus('Loading client…');
+                                setDetail(`${formatMb(loadedBytes)} cached`);
+                            } else {
+                                setStatus(`Preparing assets — ${formatMb(loadedBytes)} / ${formatMb(totalBytes)}`);
+                                setDetail(file ? file : '');
+                            }
+                        },
+                    });
+                } catch (e) {
+                    console.error('[prefetch] failed:', e);
+                    setStatus('Asset prefetch failed — continuing anyway');
+                    setDetail(e.message || '');
+                }
+            } else {
+                setStatus('Loading client…');
+                setProgress(95);
+            }
+
+            // 3. Load WASM
+            setStatus('Loading client…');
+            setProgress(96);
             const script = document.createElement('script');
             script.src = '/build/JourneyClient.js';
             script.async = true;
             document.body.appendChild(script);
         }
+
+        boot();
     </script>
 </body>
 

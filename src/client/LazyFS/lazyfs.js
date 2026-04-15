@@ -17,10 +17,29 @@
 var LazyFS = {
 	// Configuration
 	CHUNK_SIZE: 0, // Set dynamically from C++
+	HTTP_CHUNK_SIZE: 2097152, // 2 MiB — balance HTTP overhead vs chunk size in Range mode
 	ASSETS_WS_URL: null, // Set from C++ or auto-detect
+	NxBaseUrl: null, // If set, fetch NX assets via HTTPS Range (e.g. R2) instead of the WS protocol
 	DB_NAME: 'LazyFS_Cache',
 	DB_VERSION: 1,
 	STORE_NAME: 'chunks',
+
+	// Transport mode helper — true when NxBaseUrl is configured
+	isHttpMode: function () {
+		return typeof this.NxBaseUrl === 'string' && this.NxBaseUrl.length > 0;
+	},
+
+	// Effective chunk size for the current transport. HTTP Range benefits from smaller
+	// chunks: nlnx often reads a few hundred bytes of header, so the default 2 MiB
+	// over-fetches by ~8000×. 256 KiB gives ~130 ms chunk time at 15 Mbps instead of 1 s.
+	getChunkSize: function () {
+		return this.isHttpMode() ? this.HTTP_CHUNK_SIZE : this.CHUNK_SIZE;
+	},
+
+	getHttpUrl: function (filename) {
+		var base = this.NxBaseUrl.replace(/\/+$/, '');
+		return base + '/' + filename.replace(/^\/+/, '');
+	},
 
 	// IndexedDB connection
 	db: null,
@@ -97,11 +116,14 @@ var LazyFS = {
 		if (!fileEntry) {
 			return 'unknown';
 		}
+		// Cache keys include the chunk size so entries from an older build with a
+		// different chunk granularity don't alias new requests.
+		const chunkTag = `c${this.getChunkSize()}`;
 		if (fileEntry.version !== null && fileEntry.version !== undefined) {
-			return `v${fileEntry.version}`;
+			return `v${fileEntry.version}:${chunkTag}`;
 		}
 		if (fileEntry.size !== null && fileEntry.size !== undefined) {
-			return `s${fileEntry.size}`;
+			return `s${fileEntry.size}:${chunkTag}`;
 		}
 		return 'unknown';
 	},
@@ -227,6 +249,11 @@ var LazyFS = {
 	 * Initialize WebSocket connection to assets server
 	 */
 	connect: function () {
+		// HTTP mode — no persistent connection needed, each chunk is a Range request
+		if (this.isHttpMode()) {
+			return Promise.resolve();
+		}
+
 		if (this.wsConnected || this.wsConnecting) {
 			return Promise.resolve();
 		}
@@ -392,9 +419,29 @@ var LazyFS = {
 	},
 
 	/**
-	 * Get file size via WebSocket
+	 * Get file size via WebSocket or HTTP HEAD
 	 */
 	getFileSize: async function (filepath) {
+		if (this.isHttpMode()) {
+			const url = this.getHttpUrl(filepath);
+			const response = await fetch(url, { method: 'HEAD' });
+			if (!response.ok) {
+				throw new Error(`HEAD ${url} -> ${response.status}`);
+			}
+			const size = parseInt(response.headers.get('content-length') || '0', 10);
+			const etag = response.headers.get('etag');
+			const lastModified = response.headers.get('last-modified');
+			const versionTag = etag
+				? etag.replace(/"/g, '')
+				: lastModified
+					? Date.parse(lastModified).toString()
+					: null;
+			if (this.files.has(filepath)) {
+				this.files.get(filepath).version = versionTag;
+			}
+			return size;
+		}
+
 		await this.connect();
 
 		const key = `size:${filepath}`;
@@ -417,9 +464,58 @@ var LazyFS = {
 	},
 
 	/**
+	 * Fetch a batch of chunks [startChunk, endChunk] inclusive via a single HTTP Range request.
+	 * Splits the response into per-chunk buffers and seeds both memory + IndexedDB caches
+	 * so the rest of LazyFS doesn't need to know which transport was used.
+	 */
+	fetchChunksHttp: async function (filepath, startChunk, endChunk) {
+		const fileEntry = this.files.get(filepath);
+		if (!fileEntry) {
+			throw new Error(`File not registered: ${filepath}`);
+		}
+		if (fileEntry.size === null || fileEntry.size === undefined) {
+			// Ensure we know the total size before computing the tail range
+			fileEntry.size = await this.getFileSize(filepath);
+		}
+
+		const chunkSize = this.getChunkSize();
+		const rangeStart = startChunk * chunkSize;
+		const rangeEnd = Math.min((endChunk + 1) * chunkSize, fileEntry.size) - 1;
+		const url = this.getHttpUrl(filepath);
+		const response = await fetch(url, {
+			headers: { 'Range': `bytes=${rangeStart}-${rangeEnd}` }
+		});
+		if (!response.ok && response.status !== 206) {
+			throw new Error(`GET ${url} Range bytes=${rangeStart}-${rangeEnd} -> ${response.status}`);
+		}
+		const buffer = new Uint8Array(await response.arrayBuffer());
+
+		const versionTag = this.getFileVersionTag(fileEntry);
+		let offset = 0;
+		for (let chunkIdx = startChunk; chunkIdx <= endChunk; chunkIdx++) {
+			const remaining = buffer.length - offset;
+			if (remaining <= 0) break;
+			const len = Math.min(chunkSize, remaining);
+			const chunkData = buffer.slice(offset, offset + len);
+			offset += len;
+
+			const cacheKey = this.getChunkCacheKey(filepath, versionTag, chunkIdx);
+			this.chunkCache.set(cacheKey, chunkData);
+			if (versionTag !== 'unknown') {
+				this.setCachedChunk(filepath, versionTag, chunkIdx, chunkData);
+			}
+			this.logFetch(filepath, chunkIdx, chunkData.length, false);
+		}
+	},
+
+	/**
 	 * Fetch a batch of chunks
 	 */
 	fetchChunks: async function (filepath, startChunk, endChunk) {
+		if (this.isHttpMode()) {
+			return this.fetchChunksHttp(filepath, startChunk, endChunk);
+		}
+
 		await this.connect();
 
 		const key = `batch:${filepath}:${startChunk}:${endChunk}`;
@@ -455,6 +551,12 @@ var LazyFS = {
 		// Check cache first
 		if (this.chunkCache.has(cacheKey)) {
 			return this.chunkCache.get(cacheKey);
+		}
+
+		// HTTP mode — single-chunk path reuses the batch implementation
+		if (this.isHttpMode()) {
+			await this.fetchChunksHttp(filepath, chunkIndex, chunkIndex);
+			return this.chunkCache.get(cacheKey) || null;
 		}
 
 		// Fetch single chunk
@@ -514,9 +616,10 @@ var LazyFS = {
 			}
 		}
 
-		// Calculate which chunks we need
-		const startChunk = Math.floor(offset / this.CHUNK_SIZE);
-		const endChunk = Math.floor((offset + length - 1) / this.CHUNK_SIZE);
+		// Calculate which chunks we need — HTTP and WS modes use different chunk sizes
+		const chunkSize = this.getChunkSize();
+		const startChunk = Math.floor(offset / chunkSize);
+		const endChunk = Math.floor((offset + length - 1) / chunkSize);
 
 		// Identify chunks that need fetching
 		let needsFetch = false;
@@ -530,7 +633,7 @@ var LazyFS = {
 
 			// Check memory cache first
 			if (this.chunkCache.has(cacheKey)) {
-				this.logFetch(filepath, chunkIdx, this.CHUNK_SIZE, true); // Log cache hit
+				this.logFetch(filepath, chunkIdx, chunkSize, true); // Log cache hit
 
 				// End current missing range if any
 				if (missingStart !== -1) {
@@ -600,11 +703,14 @@ var LazyFS = {
 				return null;
 			}
 
-			const chunkStart = chunkIdx * this.CHUNK_SIZE;
+			const chunkStart = chunkIdx * chunkSize;
 
-			// Calculate what part of this chunk we need
+			// Calculate what part of this chunk we need. Clamp by `chunkSize` so stale
+			// cache entries that happen to be larger (e.g. from a previous build with a
+			// bigger chunk) can't spill data meant for later chunks.
+			const chunkEnd = Math.min(chunk.length, chunkSize);
 			const readStart = Math.max(0, offset - chunkStart);
-			const readEnd = Math.min(chunk.length, offset + length - chunkStart);
+			const readEnd = Math.min(chunkEnd, offset + length - chunkStart);
 			const readLength = readEnd - readStart;
 
 			// Copy only the needed bytes
