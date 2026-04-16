@@ -19,8 +19,6 @@
 
 #include "StatCaps.h"
 
-#include <cmath>
-
 namespace jrc
 {
     CharStats::CharStats(const StatsEntry& s)
@@ -90,23 +88,28 @@ namespace jrc
 
         // v83 magic damage base (per hit line, skillAtk = 1). Linear in
         // skillAtk, so Skill::apply_stats scales by the skill's `mad`.
-        //   MAX = ((TMA * ceil(TMA/1000) + TMA)              / 30 + INT/200)
-        //   MIN = ((TMA * ceil(TMA/1000) + TMA*mastery*0.9)  / 30 + INT/200)
-        // The "TMA^2/1000" form from oddjobs/AyumiLove halves damage at
-        // TMA<1000 vs. what the native v83 client produces — the Cosmic
-        // server's cheat cap (AbstractDealDamageHandler.java:622) uses the
-        // stepwise ceil form and was sized to the real client's output.
-        // Stored as double: realistic base values are <30 at low level.
+        //   MAX = ((TMA^2/1000 + TMA)              / 30 + INT/200)
+        //   MIN = ((TMA^2/1000 + TMA*mastery*0.9)  / 30 + INT/200)
+        // TMA on the Cosmic server is `localint_ + equipmagic + matkbuff`
+        // (Character.java#reapplyLocalStats, capped at 2000). In WASM,
+        // Equipstat::MAGIC only carries gear/buff MATK — summing with INT
+        // reconstructs server TMA. Without this, a pure-INT 1st-job mage
+        // computes damage from ~wand MATK alone (e.g. 25) instead of the
+        // full 168 TMA, underselling damage by ~6x.
         if (is_magician())
         {
-            double tma = static_cast<double>(get_total(Equipstat::MAGIC));
             double fint = static_cast<double>(get_total(Equipstat::INT));
+            double equipmagic =
+                static_cast<double>(get_total(Equipstat::MAGIC));
+            double tma = fint + equipmagic;
+            if (tma > 2000.0) tma = 2000.0;
             double buff_mult = 1.0 + static_cast<double>(damagepercent);
-            double tma_step = tma * std::ceil(tma / 1000.0);
-            double max_base = (tma_step + tma) / 30.0 + fint / 200.0;
-            double min_base = (tma_step
-                              + tma * static_cast<double>(mastery) * 0.9)
-                              / 30.0 + fint / 200.0;
+            double max_base =
+                ((tma * tma / 1000.0) + tma) / 30.0 + fint / 200.0;
+            double min_base =
+                ((tma * tma / 1000.0)
+                  + tma * static_cast<double>(mastery) * 0.9)
+                  / 30.0 + fint / 200.0;
             magic_base_max = max_base * buff_mult;
             magic_base_min = min_base * buff_mult;
         }

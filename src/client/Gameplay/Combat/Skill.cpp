@@ -26,8 +26,6 @@
 #include "nlnx/node.hpp"
 #include "nlnx/nx.hpp"
 
-#include <cmath>
-
 
 namespace jrc
 {
@@ -208,23 +206,25 @@ namespace jrc
                 if (mastery_frac > 1.0)
                     mastery_frac = 1.0;
 
-                double tma =
-                    static_cast<double>(cstats->get_total(Equipstat::MAGIC));
+                // TMA on the Cosmic server is localint_ + equipmagic +
+                // matkbuff (Character.java#reapplyLocalStats, capped 2000).
+                // In WASM, Equipstat::MAGIC only holds gear/buff MATK, so
+                // we sum with INT to reconstruct server TMA. Without this,
+                // a pure-INT 1st-job mage computes damage from wand MATK
+                // alone (e.g. 25) rather than the full 168 TMA.
                 double fint =
                     static_cast<double>(cstats->get_total(Equipstat::INT));
+                double equipmagic =
+                    static_cast<double>(cstats->get_total(Equipstat::MAGIC));
+                double tma = fint + equipmagic;
+                if (tma > 2000.0) tma = 2000.0;
                 double buff_mult =
                     1.0 + static_cast<double>(cstats->get_damagepercent());
 
-                // Stepwise TMA^2 proxy: TMA * ceil(TMA/1000). For TMA<1000
-                // this evaluates to TMA (not TMA^2/1000), matching the v83
-                // native client and the Cosmic server's damage cap; the
-                // continuous oddjobs/AyumiLove form under-produces by ~2x
-                // for low-TMA casters.
-                double tma_step = tma * std::ceil(tma / 1000.0);
                 double max_base =
-                    (tma_step + tma) / 30.0 + fint / 200.0;
+                    ((tma * tma / 1000.0) + tma) / 30.0 + fint / 200.0;
                 double min_base =
-                    (tma_step + tma * mastery_frac * 0.9)
+                    ((tma * tma / 1000.0) + tma * mastery_frac * 0.9)
                         / 30.0 + fint / 200.0;
 
                 attack.maxdamage = max_base * buff_mult * skill_atk;
