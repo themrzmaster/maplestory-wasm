@@ -26,6 +26,8 @@
 #include "nlnx/node.hpp"
 #include "nlnx/nx.hpp"
 
+#include <cmath>
+
 
 namespace jrc
 {
@@ -213,10 +215,16 @@ namespace jrc
                 double buff_mult =
                     1.0 + static_cast<double>(cstats->get_damagepercent());
 
+                // Stepwise TMA^2 proxy: TMA * ceil(TMA/1000). For TMA<1000
+                // this evaluates to TMA (not TMA^2/1000), matching the v83
+                // native client and the Cosmic server's damage cap; the
+                // continuous oddjobs/AyumiLove form under-produces by ~2x
+                // for low-TMA casters.
+                double tma_step = tma * std::ceil(tma / 1000.0);
                 double max_base =
-                    ((tma * tma / 1000.0) + tma) / 30.0 + fint / 200.0;
+                    (tma_step + tma) / 30.0 + fint / 200.0;
                 double min_base =
-                    ((tma * tma / 1000.0) + tma * mastery_frac * 0.9)
+                    (tma_step + tma * mastery_frac * 0.9)
                         / 30.0 + fint / 200.0;
 
                 attack.maxdamage = max_base * buff_mult * skill_atk;
